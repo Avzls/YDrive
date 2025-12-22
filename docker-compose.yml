@@ -62,12 +62,9 @@ services:
       - MINIO_SECRET_KEY=minioadmin
       - JWT_SECRET=${JWT_SECRET:-supersecretjwtkey}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-refreshsecretkey}
-      - CLAMAV_HOST=clamav
-      - CLAMAV_PORT=3310
       - SKIP_VIRUS_SCAN=true
     depends_on:
       - api
-      - clamav
     volumes:
       - ./temp:/app/temp
     networks:
@@ -131,18 +128,6 @@ services:
       - filestorage
 
   # ============================================
-  # ClamAV Antivirus
-  # ============================================
-  clamav:
-    image: clamav/clamav:latest
-    volumes:
-      - clamav_data:/var/lib/clamav
-    ports:
-      - "3310:3310"
-    networks:
-      - filestorage
-
-  # ============================================
   # MinIO Initialization
   # ============================================
   minio-init:
@@ -165,4 +150,3 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
-  clamav_data:
