@@ -15,6 +15,7 @@ import {
   Res,
   StreamableFile,
   UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -163,6 +164,75 @@ export class FilesController {
       res.set({
         'Content-Type': mimeType,
         'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+        'Content-Length': size.toString(),
+      });
+
+      return new StreamableFile(stream as any);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  /**
+   * GET /files/:id/thumbnail
+   * Stream thumbnail image
+   */
+  @Public()
+  @Get(':id/thumbnail')
+  @ApiOperation({ summary: 'Get file thumbnail' })
+  @ApiProduces('image/webp')
+  @ApiQuery({ name: 'token', required: true })
+  async getThumbnail(
+    @Param('id') id: string,
+    @Query('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    if (!token) throw new UnauthorizedException('Token required');
+
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const userId = payload.sub;
+      if (!userId) throw new UnauthorizedException('Invalid token');
+
+      const result = await this.filesService.getThumbnailStream(id, userId);
+      if (!result) {
+        res.status(404);
+        throw new NotFoundException('No thumbnail available');
+      }
+
+      res.set({ 'Content-Type': result.mimeType });
+      return new StreamableFile(result.stream as any);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  /**
+   * GET /files/:id/preview
+   * Stream file for inline preview (images, PDFs, videos)
+   */
+  @Public()
+  @Get(':id/preview')
+  @ApiOperation({ summary: 'Stream file for preview' })
+  @ApiQuery({ name: 'token', required: true })
+  async getPreview(
+    @Param('id') id: string,
+    @Query('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    if (!token) throw new UnauthorizedException('Token required');
+
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const userId = payload.sub;
+      if (!userId) throw new UnauthorizedException('Invalid token');
+
+      const { stream, fileName, mimeType, size } = await this.filesService.getPreviewStream(id, userId);
+      
+      res.set({
+        'Content-Type': mimeType,
+        'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
         'Content-Length': size.toString(),
       });
 

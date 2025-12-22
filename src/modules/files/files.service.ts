@@ -281,6 +281,71 @@ export class FilesService {
   }
 
   /**
+   * Get thumbnail stream for file preview
+   */
+  async getThumbnailStream(fileId: string, userId: string): Promise<{
+    stream: NodeJS.ReadableStream;
+    mimeType: string;
+  } | null> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId },
+    });
+
+    if (!file || file.ownerId !== userId) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (!file.thumbnailKey) {
+      return null; // No thumbnail available
+    }
+
+    const stream = await this.minioService.getObject('thumbnails', file.thumbnailKey);
+    return {
+      stream,
+      mimeType: 'image/webp',
+    };
+  }
+
+  /**
+   * Get preview stream for direct file viewing (images, PDFs, videos)
+   */
+  async getPreviewStream(fileId: string, userId: string): Promise<{
+    stream: NodeJS.ReadableStream;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (file.ownerId !== userId) {
+      throw new NotFoundException('File not found or access denied');
+    }
+
+    if (file.status !== FileStatus.READY && file.status !== FileStatus.PROCESSING) {
+      throw new BadRequestException(`File is not ready. Status: ${file.status}`);
+    }
+
+    // For preview, we use the original file (or preview version if available)
+    const storageKey = file.previewKey || file.storageKey;
+    const bucket = file.previewKey ? 'previews' : 'files';
+
+    const stream = await this.minioService.getObject(bucket as any, storageKey);
+
+    return {
+      stream,
+      fileName: file.name,
+      mimeType: file.mimeType,
+      size: file.sizeBytes,
+    };
+  }
+
+  /**
    * Get file by ID
    */
   async findById(fileId: string): Promise<File | null> {
