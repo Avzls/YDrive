@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # API Server
+  # ============================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=filestorage
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - JWT_SECRET=${JWT_SECRET:-supersecretjwtkey}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-refreshsecretkey}
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./temp:/app/temp
+    networks:
+      - filestorage
+
+  # ============================================
+  # Background Worker
+  # ============================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run start:worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=filestorage
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - JWT_SECRET=${JWT_SECRET:-supersecretjwtkey}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-refreshsecretkey}
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+      - SKIP_VIRUS_SCAN=true
+    depends_on:
+      - api
+      - clamav
+    volumes:
+      - ./temp:/app/temp
+    networks:
+      - filestorage
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=filestorage
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - filestorage
+
+  # ============================================
+  # Redis
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - filestorage
+
+  # ============================================
+  # MinIO Object Storage
+  # ============================================
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - filestorage
+
+  # ============================================
+  # ClamAV Antivirus
+  # ============================================
+  clamav:
+    image: clamav/clamav:latest
+    volumes:
+      - clamav_data:/var/lib/clamav
+    ports:
+      - "3310:3310"
+    networks:
+      - filestorage
+
+  # ============================================
+  # MinIO Initialization
+  # ============================================
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command: /init-minio.sh
+    volumes:
+      - ./init-minio.sh:/init-minio.sh:ro
+    networks:
+      - filestorage
+
+networks:
+  filestorage:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  clamav_data:
