@@ -228,12 +228,13 @@ export class FilesController {
       const userId = payload.sub;
       if (!userId) throw new UnauthorizedException('Invalid token');
 
-      const { stream, fileName, mimeType, size } = await this.filesService.getPreviewStream(id, userId);
+      const { stream, fileName, mimeType } = await this.filesService.getPreviewStream(id, userId);
       
+      // Don't set Content-Length because preview file size may differ from original
+      // Browser will handle chunked transfer encoding
       res.set({
         'Content-Type': mimeType,
         'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
-        'Content-Length': size.toString(),
       });
 
       return new StreamableFile(stream as any);

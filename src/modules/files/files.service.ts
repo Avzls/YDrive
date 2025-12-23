@@ -337,10 +337,22 @@ export class FilesService {
 
     const stream = await this.minioService.getObject(bucket as any, storageKey);
 
+    // Determine mimeType: if previewKey exists and is PDF, use PDF mimeType
+    let previewMimeType = file.mimeType;
+    if (file.previewKey) {
+      if (file.previewKey.endsWith('.pdf')) {
+        previewMimeType = 'application/pdf';
+      } else if (file.previewKey.endsWith('.png')) {
+        previewMimeType = 'image/png';
+      } else if (file.previewKey.endsWith('.mp4')) {
+        previewMimeType = 'video/mp4';
+      }
+    }
+
     return {
       stream,
       fileName: file.name,
-      mimeType: file.mimeType,
+      mimeType: previewMimeType,
       size: file.sizeBytes,
     };
   }

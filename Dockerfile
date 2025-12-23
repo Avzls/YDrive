@@ -21,7 +21,18 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Install ffmpeg, poppler-utils for file processing
-RUN apk add --no-cache ffmpeg poppler-utils libreoffice
+# Install fonts for LibreOffice to properly render text
+RUN apk add --no-cache \
+    ffmpeg \
+    poppler-utils \
+    libreoffice \
+    fontconfig \
+    font-noto \
+    font-noto-cjk \
+    ttf-dejavu \
+    ttf-liberation \
+    ttf-freefont \
+    && fc-cache -f
 
 # Copy built files
 COPY --from=builder /app/dist ./dist
