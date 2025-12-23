@@ -134,4 +134,19 @@ export class FoldersController {
   ) {
     await this.foldersService.permanentDelete(id, user.id);
   }
+
+  @Post(':id/star')
+  @ApiOperation({ summary: 'Toggle folder starred status' })
+  async toggleStar(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.foldersService.toggleStar(id, user.id);
+  }
+
+  @Get('starred/list')
+  @ApiOperation({ summary: 'List starred folders' })
+  async listStarred(@CurrentUser() user: User) {
+    return this.foldersService.listStarred(user.id);
+  }
 }

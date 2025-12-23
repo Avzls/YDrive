@@ -214,4 +214,28 @@ export class FoldersService {
     // Delete the folder
     await this.folderRepository.delete(id);
   }
+
+  /**
+   * Toggle starred status for folder
+   */
+  async toggleStar(id: string, userId: string): Promise<{ isStarred: boolean }> {
+    const folder = await this.findById(id, userId);
+    folder.isStarred = !folder.isStarred;
+    await this.folderRepository.save(folder);
+    return { isStarred: folder.isStarred };
+  }
+
+  /**
+   * List all starred folders for user
+   */
+  async listStarred(userId: string): Promise<Folder[]> {
+    return this.folderRepository.find({
+      where: {
+        ownerId: userId,
+        isStarred: true,
+        isTrashed: false,
+      },
+      order: { name: 'ASC' },
+    });
+  }
 }

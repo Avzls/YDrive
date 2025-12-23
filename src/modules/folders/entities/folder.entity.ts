@@ -45,6 +45,9 @@ export class Folder {
   @Column({ name: 'is_trashed', default: false })
   isTrashed: boolean;
 
+  @Column({ name: 'is_starred', default: false })
+  isStarred: boolean;
+
   @Column({ name: 'trashed_at', nullable: true })
   trashedAt?: Date;
 
