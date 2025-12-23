@@ -389,6 +389,56 @@ export class FilesService {
   }
 
   /**
+   * Search files by name
+   */
+  async search(userId: string, query: string): Promise<File[]> {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    return this.fileRepository
+      .createQueryBuilder('file')
+      .where('file.ownerId = :userId', { userId })
+      .andWhere('file.isTrashed = false')
+      .andWhere('LOWER(file.name) LIKE LOWER(:query)', { query: `%${query}%` })
+      .orderBy('file.name', 'ASC')
+      .limit(50)
+      .getMany();
+  }
+
+  /**
+   * Toggle starred status for file
+   */
+  async toggleStar(fileId: string, userId: string): Promise<{ isStarred: boolean }> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, ownerId: userId, isTrashed: false },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    file.isStarred = !file.isStarred;
+    await this.fileRepository.save(file);
+
+    return { isStarred: file.isStarred };
+  }
+
+  /**
+   * List all starred files for user
+   */
+  async listStarred(userId: string): Promise<File[]> {
+    return this.fileRepository.find({
+      where: {
+        ownerId: userId,
+        isStarred: true,
+        isTrashed: false,
+      },
+      order: { name: 'ASC' },
+    });
+  }
+
+  /**
    * Soft delete file (move to trash)
    */
   async softDelete(fileId: string, userId: string): Promise<void> {

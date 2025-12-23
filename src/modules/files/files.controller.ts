@@ -115,6 +115,43 @@ export class FilesController {
   }
 
   /**
+   * GET /files/search?q=query
+   * Search files by name
+   */
+  @Get('search')
+  @ApiOperation({ summary: 'Search files' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  async searchFiles(
+    @Query('q') query: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.search(user.id, query);
+  }
+
+  /**
+   * GET /files/starred
+   * List all starred files
+   */
+  @Get('starred')
+  @ApiOperation({ summary: 'List starred files' })
+  async listStarred(@CurrentUser() user: User) {
+    return this.filesService.listStarred(user.id);
+  }
+
+  /**
+   * POST /files/:id/star
+   * Toggle starred status
+   */
+  @Post(':id/star')
+  @ApiOperation({ summary: 'Toggle file starred status' })
+  async toggleStar(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.toggleStar(id, user.id);
+  }
+
+  /**
    * GET /files/:id
    * Get file details
    */
