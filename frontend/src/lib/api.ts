@@ -286,4 +286,72 @@ export const sharingApi = {
   },
 };
 
+// Admin
+export interface SystemStats {
+  totalUsers: number;
+  activeUsers: number;
+  totalFiles: number;
+  totalFolders: number;
+  totalStorageUsed: number;
+  totalStorageQuota: number;
+}
+
+export interface AdminUser {
+  id: string;
+  nip: string;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  isActive: boolean;
+  storageQuotaBytes: number;
+  storageUsedBytes: number;
+  createdAt: string;
+}
+
+export interface CreateUserDto {
+  nip: string;
+  email: string;
+  name: string;
+  password: string;
+  isAdmin?: boolean;
+  storageQuotaBytes?: number;
+}
+
+export interface UpdateUserDto {
+  name?: string;
+  email?: string;
+  isActive?: boolean;
+  isAdmin?: boolean;
+  storageQuotaBytes?: number;
+  password?: string;
+}
+
+export const adminApi = {
+  getStats: async () => {
+    const { data } = await api.get<SystemStats>('/admin/stats');
+    return data;
+  },
+  listUsers: async (page = 1, limit = 20, search?: string) => {
+    const { data } = await api.get<{ users: AdminUser[]; total: number }>('/admin/users', {
+      params: { page, limit, ...(search ? { search } : {}) },
+    });
+    return data;
+  },
+  getUser: async (id: string) => {
+    const { data } = await api.get<AdminUser>(`/admin/users/${id}`);
+    return data;
+  },
+  createUser: async (dto: CreateUserDto) => {
+    const { data } = await api.post<AdminUser>('/admin/users', dto);
+    return data;
+  },
+  updateUser: async (id: string, dto: UpdateUserDto) => {
+    const { data } = await api.patch<AdminUser>(`/admin/users/${id}`, dto);
+    return data;
+  },
+  deleteUser: async (id: string) => {
+    await api.delete(`/admin/users/${id}`);
+  },
+};
+
 export default api;

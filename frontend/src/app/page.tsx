@@ -343,6 +343,8 @@ export default function HomePage() {
           storageQuota={user?.storageQuotaBytes || 0}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          isAdmin={user?.isAdmin || false}
+          onAdminClick={() => router.push('/admin')}
         />
 
         {/* Main Content */}

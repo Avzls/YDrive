@@ -11,6 +11,7 @@ import { FoldersModule } from '@modules/folders/folders.module';
 import { PermissionsModule } from '@modules/permissions/permissions.module';
 import { SharingModule } from '@modules/sharing/sharing.module';
 import { AuditModule } from '@modules/audit/audit.module';
+import { AdminModule } from '@modules/admin/admin.module';
 import { JobsModule } from './jobs/jobs.module';
 
 // Entities
@@ -67,6 +68,7 @@ import { AuditLog } from '@modules/audit/entities/audit-log.entity';
     PermissionsModule,
     SharingModule,
     AuditModule,
+    AdminModule,
     JobsModule,
   ],
 })
