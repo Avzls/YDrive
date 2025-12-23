@@ -70,6 +70,12 @@ export class FoldersController {
     return this.foldersService.listContents(parentId || null, user.id);
   }
 
+  @Get('trash')
+  @ApiOperation({ summary: 'List trashed folders' })
+  async listTrashed(@CurrentUser() user: User) {
+    return this.foldersService.listTrashed(user.id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get folder details' })
   async getFolder(
@@ -117,5 +123,15 @@ export class FoldersController {
   ) {
     await this.foldersService.restore(id, user.id);
     return { message: 'Folder restored' };
+  }
+
+  @Delete(':id/permanent')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Permanently delete folder' })
+  async permanentDelete(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.foldersService.permanentDelete(id, user.id);
   }
 }

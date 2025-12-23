@@ -182,4 +182,36 @@ export class FoldersService {
     folder.trashedAt = undefined;
     await this.folderRepository.save(folder);
   }
+
+  /**
+   * List all trashed folders for user
+   */
+  async listTrashed(userId: string): Promise<Folder[]> {
+    return this.folderRepository.find({
+      where: {
+        ownerId: userId,
+        isTrashed: true,
+      },
+      order: { trashedAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Permanently delete folder and its contents
+   */
+  async permanentDelete(id: string, userId: string): Promise<void> {
+    const folder = await this.folderRepository.findOne({
+      where: { id, ownerId: userId, isTrashed: true },
+    });
+
+    if (!folder) {
+      throw new NotFoundException('Folder not found in trash');
+    }
+
+    // Delete all files in this folder (they should already be trashed)
+    await this.fileRepository.delete({ folderId: id });
+
+    // Delete the folder
+    await this.folderRepository.delete(id);
+  }
 }
