@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -10,6 +10,8 @@ import { MinioService } from '@modules/storage/minio.service';
 import { InitUploadDto, InitUploadResponseDto, CompleteUploadResponseDto } from './dto';
 import { User } from '@modules/users/entities/user.entity';
 import { ConfigService } from '@nestjs/config';
+import { PermissionsService } from '@modules/permissions/permissions.service';
+import { PermissionRole } from '@modules/permissions/entities/permission.entity';
 
 @Injectable()
 export class FilesService {
@@ -25,6 +27,7 @@ export class FilesService {
     private userRepository: Repository<User>,
     private minioService: MinioService,
     private configService: ConfigService,
+    private permissionsService: PermissionsService,
     @InjectQueue('file-processing')
     private fileProcessingQueue: Queue,
   ) {
@@ -222,9 +225,12 @@ export class FilesService {
       throw new NotFoundException('File not found');
     }
 
-    // TODO: Check permission here
+    // Check owner or permission
     if (file.ownerId !== userId) {
-      throw new NotFoundException('File not found or access denied');
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) {
+        throw new NotFoundException('File not found or access denied');
+      }
     }
 
     if (file.status !== FileStatus.READY && file.status !== FileStatus.PROCESSING) {
@@ -261,9 +267,12 @@ export class FilesService {
       throw new NotFoundException('File not found');
     }
 
-    // TODO: Check permission here
+    // Check owner or permission
     if (file.ownerId !== userId) {
-      throw new NotFoundException('File not found or access denied');
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) {
+        throw new NotFoundException('File not found or access denied');
+      }
     }
 
     if (file.status !== FileStatus.READY && file.status !== FileStatus.PROCESSING) {
@@ -295,8 +304,16 @@ export class FilesService {
       where: { id: fileId },
     });
 
-    if (!file || file.ownerId !== userId) {
+    if (!file) {
       throw new NotFoundException('File not found');
+    }
+
+    // Check owner or permission
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) {
+        throw new NotFoundException('File not found or access denied');
+      }
     }
 
     if (!file.thumbnailKey) {
@@ -327,8 +344,12 @@ export class FilesService {
       throw new NotFoundException('File not found');
     }
 
+    // Check owner or permission
     if (file.ownerId !== userId) {
-      throw new NotFoundException('File not found or access denied');
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) {
+        throw new NotFoundException('File not found or access denied');
+      }
     }
 
     if (file.status !== FileStatus.READY && file.status !== FileStatus.PROCESSING) {
@@ -404,9 +425,11 @@ export class FilesService {
       return [];
     }
 
+    // Search owned files and files where user has explicit permission
     return this.fileRepository
       .createQueryBuilder('file')
-      .where('file.ownerId = :userId', { userId })
+      .leftJoin('permissions', 'perm', 'perm.file_id = file.id AND perm.user_id = :userId', { userId })
+      .where('(file.ownerId = :userId OR perm.id IS NOT NULL)', { userId })
       .andWhere('file.isTrashed = false')
       .andWhere('LOWER(file.name) LIKE LOWER(:query)', { query: `%${query}%` })
       .orderBy('file.name', 'ASC')
@@ -419,11 +442,16 @@ export class FilesService {
    */
   async toggleStar(fileId: string, userId: string): Promise<{ isStarred: boolean }> {
     const file = await this.fileRepository.findOne({
-      where: { id: fileId, ownerId: userId, isTrashed: false },
+      where: { id: fileId, isTrashed: false },
     });
 
     if (!file) {
       throw new NotFoundException('File not found');
+    }
+
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) throw new NotFoundException('File not found or access denied');
     }
 
     file.isStarred = !file.isStarred;
@@ -465,11 +493,16 @@ export class FilesService {
    */
   async rename(fileId: string, userId: string, newName: string): Promise<File> {
     const file = await this.fileRepository.findOne({
-      where: { id: fileId, ownerId: userId, isTrashed: false },
+      where: { id: fileId, isTrashed: false },
     });
 
     if (!file) {
       throw new NotFoundException('File not found');
+    }
+
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to rename this file');
     }
 
     file.name = newName;
@@ -481,11 +514,27 @@ export class FilesService {
    */
   async move(fileId: string, userId: string, targetFolderId: string | null): Promise<File> {
     const file = await this.fileRepository.findOne({
-      where: { id: fileId, ownerId: userId, isTrashed: false },
+      where: { id: fileId, isTrashed: false },
     });
 
     if (!file) {
       throw new NotFoundException('File not found');
+    }
+
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to move this file');
+    }
+
+    // Check target folder access if moving to another folder
+    if (targetFolderId) {
+      const targetFolder = await this.fileRepository.manager.getRepository('folders').findOne({ // Using manager to avoid circular dependency or just raw repository
+        where: { id: targetFolderId, isTrashed: false }
+      });
+      if (targetFolder && targetFolder.ownerId !== userId) {
+        const hasTargetAccess = await this.permissionsService.checkAccess(userId, targetFolderId, 'folder', PermissionRole.EDITOR);
+        if (!hasTargetAccess) throw new ForbiddenException('You do not have permission to move items into the target folder');
+      }
     }
 
     file.folderId = targetFolderId ?? undefined;
@@ -497,11 +546,16 @@ export class FilesService {
    */
   async softDelete(fileId: string, userId: string): Promise<void> {
     const file = await this.fileRepository.findOne({
-      where: { id: fileId, ownerId: userId },
+      where: { id: fileId, isTrashed: false },
     });
 
     if (!file) {
       throw new NotFoundException('File not found');
+    }
+
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to delete this file');
     }
 
     file.isTrashed = true;

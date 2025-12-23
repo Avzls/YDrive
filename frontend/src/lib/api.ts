@@ -219,6 +219,12 @@ export const foldersApi = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
     return `${API_BASE}/folders/${id}/download?token=${token}`;
   },
+  search: async (query: string) => {
+    const { data } = await api.get<Folder[]>('/folders/search', {
+      params: { q: query }
+    });
+    return data;
+  },
 };
 
 // Sharing
@@ -354,4 +360,46 @@ export const adminApi = {
   },
 };
 
+// Permissions (User-to-User Sharing)
+export interface SharedUser {
+  id: string;
+  nip: string;
+  name: string;
+  email: string;
+}
+
+export interface PermissionEntry {
+  id: string;
+  userId: string;
+  role: 'owner' | 'editor' | 'viewer';
+  createdAt: string;
+  user?: SharedUser;
+}
+
+export const permissionsApi = {
+  shareWith: async (resourceId: string, resourceType: 'file' | 'folder', userId: string, role: 'viewer' | 'editor') => {
+    const body = resourceType === 'file' 
+      ? { fileId: resourceId, userId, role }
+      : { folderId: resourceId, userId, role };
+    const { data } = await api.post<PermissionEntry>('/permissions/share', body);
+    return data;
+  },
+  listAccess: async (resourceId: string, resourceType: 'file' | 'folder') => {
+    const { data } = await api.get<PermissionEntry[]>(`/permissions/${resourceType}/${resourceId}`);
+    return data;
+  },
+  revokeAccess: async (resourceId: string, resourceType: 'file' | 'folder', userId: string) => {
+    await api.delete(`/permissions/${resourceType}/${resourceId}/${userId}`);
+  },
+  searchUsers: async (query: string) => {
+    const { data } = await api.get<SharedUser[]>('/permissions/users/search', { params: { q: query } });
+    return data;
+  },
+  listSharedWithMe: async () => {
+    const { data } = await api.get<{ files: FileItem[]; folders: Folder[] }>('/permissions/shared-with-me');
+    return data;
+  },
+};
+
 export default api;
+
