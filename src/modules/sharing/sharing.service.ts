@@ -72,7 +72,7 @@ export class SharingService {
     return link;
   }
 
-  async accessShareLink(token: string, password?: string): Promise<{ file?: File; downloadUrl?: string }> {
+  async accessShareLink(token: string, password?: string): Promise<{ file?: File; allowDownload?: boolean }> {
     const link = await this.getByToken(token);
 
     // Check password
@@ -87,16 +87,7 @@ export class SharingService {
     await this.shareLinkRepository.save(link);
 
     if (link.file) {
-      let downloadUrl: string | undefined;
-      if (link.allowDownload) {
-        downloadUrl = await this.minioService.getPresignedDownloadUrl(
-          'files',
-          link.file.storageKey,
-          3600,
-          link.file.name,
-        );
-      }
-      return { file: link.file, downloadUrl };
+      return { file: link.file, allowDownload: link.allowDownload };
     }
 
     return { file: undefined };

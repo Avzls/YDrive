@@ -1,18 +1,18 @@
 import { Controller, Post, Body, Get, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { User } from '@modules/users/entities/user.entity';
 
 class LoginRequestDto {
-  @ApiProperty({ example: 'admin@company.local' })
-  @IsEmail()
+  @ApiProperty({ example: '25129120' })
+  @IsString()
   @IsNotEmpty()
-  email: string;
+  nip: string;
 
-  @ApiProperty({ example: 'admin123' })
+  @ApiProperty({ example: 'alvin123' })
   @IsString()
   @IsNotEmpty()
   password: string;
@@ -31,7 +31,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiOperation({ summary: 'Login with NIP and password' })
   async login(@Body() dto: LoginRequestDto) {
     return this.authService.login(dto);
   }
