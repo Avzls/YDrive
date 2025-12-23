@@ -215,6 +215,10 @@ export const foldersApi = {
     const { data } = await api.get<Folder[]>('/folders/starred/list');
     return data;
   },
+  getDownloadUrl: (id: string) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
+    return `${API_BASE}/folders/${id}/download?token=${token}`;
+  },
 };
 
 // Sharing

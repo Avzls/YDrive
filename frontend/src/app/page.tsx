@@ -10,7 +10,8 @@ import {
   Loader2,
   Menu,
   RefreshCw,
-  LogOut
+  LogOut,
+  Upload
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { foldersApi, filesApi, Folder, FileItem, authApi } from '@/lib/api';
@@ -41,6 +42,10 @@ export default function HomePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Drag & Drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   // Hydrate store on mount
   useEffect(() => {
@@ -187,6 +192,53 @@ export default function HomePage() {
     }
   };
 
+  // Drag & Drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    const droppedFiles = e.dataTransfer.files;
+    if (!droppedFiles?.length) return;
+
+    // Don't allow drop in trash or special views
+    if (currentView !== 'drive') return;
+
+    for (const file of Array.from(droppedFiles)) {
+      try {
+        await filesApi.directUpload(file, currentFolderId || undefined);
+      } catch (err) {
+        console.error('Upload failed:', err);
+      }
+    }
+    
+    loadContents();
+  };
+
   if (!mounted) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -294,7 +346,23 @@ export default function HomePage() {
         />
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto bg-white">
+        <main 
+          className="flex-1 overflow-auto bg-white relative"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {/* Drop Overlay */}
+          {isDragging && currentView === 'drive' && (
+            <div className="absolute inset-0 z-50 bg-blue-500/10 backdrop-blur-sm flex items-center justify-center border-4 border-dashed border-blue-500 rounded-lg m-2 pointer-events-none">
+              <div className="text-center">
+                <Upload className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+                <p className="text-xl font-semibold text-blue-700">Drop files to upload</p>
+                <p className="text-sm text-blue-600 mt-1">Files will be uploaded to current folder</p>
+              </div>
+            </div>
+          )}
           {/* Toolbar */}
           <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3">
             <div className="flex items-center justify-between">

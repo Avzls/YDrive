@@ -137,6 +137,7 @@ export function getFolderContextMenuItems(
   folder: { id: string; name: string; isStarred?: boolean },
   callbacks: {
     onOpen: () => void;
+    onDownload: () => void;
     onShare: () => void;
     onStar: () => void;
     onRename: () => void;
@@ -146,6 +147,7 @@ export function getFolderContextMenuItems(
 ): ContextMenuItem[] {
   return [
     { id: 'open', label: 'Open', icon: Eye, onClick: callbacks.onOpen },
+    { id: 'download', label: 'Download as ZIP', icon: Download, onClick: callbacks.onDownload },
     { id: 'share', label: 'Share', icon: Share2, onClick: callbacks.onShare, divider: true },
     { id: 'star', label: folder.isStarred ? 'Remove from Starred' : 'Add to Starred', icon: Star, onClick: callbacks.onStar },
     { id: 'rename', label: 'Rename', icon: Pencil, onClick: callbacks.onRename },

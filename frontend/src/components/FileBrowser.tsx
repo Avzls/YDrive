@@ -309,6 +309,40 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
     }
   };
 
+  const handleDownloadFolder = async (folder: Folder) => {
+    try {
+      toast.info(`Preparing download for "${folder.name}"...`);
+      const url = foldersApi.getDownloadUrl(folder.id);
+      console.log('[Download] URL:', url);
+      
+      // Fetch as blob
+      const response = await fetch(url);
+      console.log('[Download] Response status:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Download] Error response:', errorText);
+        throw new Error(`Download failed: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${folder.name}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      URL.revokeObjectURL(blobUrl);
+      toast.success(`Downloaded "${folder.name}.zip"`);
+    } catch (err) {
+      console.error('Download failed:', err);
+      toast.error('Failed to download folder');
+    }
+  };
+
   // Trash view handlers
   const handleRestoreFile = async (file: FileItem) => {
     try {
@@ -550,6 +584,7 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                 })
               : getFolderContextMenuItems(contextMenu.item as Folder, {
                   onOpen: () => onFolderClick((contextMenu.item as Folder).id),
+                  onDownload: () => handleDownloadFolder(contextMenu.item as Folder),
                   onShare: () => setShareFolder(contextMenu.item as Folder),
                   onStar: () => handleToggleStarFolder(contextMenu.item as Folder),
                   onRename: () => setRenameItem({ type: 'folder', item: contextMenu.item as Folder }),
@@ -826,6 +861,7 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
               })
             : getFolderContextMenuItems(contextMenu.item as Folder, {
                 onOpen: () => onFolderClick((contextMenu.item as Folder).id),
+                onDownload: () => handleDownloadFolder(contextMenu.item as Folder),
                 onShare: () => setShareFolder(contextMenu.item as Folder),
                 onStar: () => handleToggleStarFolder(contextMenu.item as Folder),
                 onRename: () => setRenameItem({ type: 'folder', item: contextMenu.item as Folder }),

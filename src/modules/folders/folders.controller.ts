@@ -10,12 +10,17 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
+  StreamableFile,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsUUID } from 'class-validator';
 import { FoldersService } from './folders.service';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { Public } from '@common/decorators/public.decorator';
 import { User } from '@modules/users/entities/user.entity';
 
 class CreateFolderDto {
@@ -148,5 +153,39 @@ export class FoldersController {
   @ApiOperation({ summary: 'List starred folders' })
   async listStarred(@CurrentUser() user: User) {
     return this.foldersService.listStarred(user.id);
+  }
+
+  @Public()
+  @Get(':id/download')
+  @ApiOperation({ summary: 'Download folder as ZIP' })
+  async downloadZip(
+    @Param('id') id: string,
+    @Query('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    // Validate token from query string (same as file download)
+    if (!token) {
+      throw new UnauthorizedException('Token required');
+    }
+
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const userId = payload.sub;
+
+      if (!userId) {
+        throw new UnauthorizedException('Invalid token');
+      }
+
+      const { stream, folderName } = await this.foldersService.getZipStream(id, userId);
+
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(folderName)}.zip"`,
+      });
+
+      return new StreamableFile(stream as any);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
   }
 }

@@ -1,8 +1,11 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
+import * as archiver from 'archiver';
+import { PassThrough } from 'stream';
 import { Folder } from './entities/folder.entity';
 import { File } from '@modules/files/entities/file.entity';
+import { MinioService } from '@modules/storage/minio.service';
 
 export interface CreateFolderDto {
   name: string;
@@ -16,6 +19,7 @@ export class FoldersService {
     private folderRepository: Repository<Folder>,
     @InjectRepository(File)
     private fileRepository: Repository<File>,
+    private minioService: MinioService,
   ) {}
 
   async create(dto: CreateFolderDto, userId: string): Promise<Folder> {
@@ -237,5 +241,119 @@ export class FoldersService {
       },
       order: { name: 'ASC' },
     });
+  }
+
+  /**
+   * Get folder as ZIP stream
+   */
+  async getZipStream(id: string, userId: string): Promise<{ stream: PassThrough; folderName: string }> {
+    const folder = await this.findById(id, userId);
+    
+    const passThrough = new PassThrough();
+    const archive = archiver('zip', {
+      zlib: { level: 5 }, // Compression level
+    });
+
+    archive.pipe(passThrough);
+
+    // Recursively add folder contents
+    await this.addFolderToArchive(archive, folder, userId, '');
+
+    archive.finalize();
+
+    return { stream: passThrough, folderName: folder.name };
+  }
+
+  private async addFolderToArchive(
+    archive: archiver.Archiver,
+    folder: Folder,
+    userId: string,
+    basePath: string,
+  ): Promise<void> {
+    const currentPath = basePath ? `${basePath}/${folder.name}` : folder.name;
+
+    // Get files in this folder
+    const files = await this.fileRepository.find({
+      where: {
+        folderId: folder.id,
+        ownerId: userId,
+        isTrashed: false,
+      },
+    });
+
+    // Add files to archive
+    for (const file of files) {
+      try {
+        const fileStream = await this.minioService.getObject('files', file.storageKey);
+        // Ensure file has extension - derive from mimeType if missing
+        let fileName = file.name;
+        if (!fileName.includes('.') && file.mimeType) {
+          const ext = this.getExtensionFromMimeType(file.mimeType);
+          if (ext) fileName = `${fileName}.${ext}`;
+        }
+        archive.append(fileStream as any, { name: `${currentPath}/${fileName}` });
+      } catch (err) {
+        console.error(`Failed to add file ${file.name} to archive:`, err);
+      }
+    }
+
+    // Get subfolders
+    const subfolders = await this.folderRepository.find({
+      where: {
+        parentId: folder.id,
+        ownerId: userId,
+        isTrashed: false,
+      },
+    });
+
+    // Recursively add subfolders
+    for (const subfolder of subfolders) {
+      await this.addFolderToArchive(archive, subfolder, userId, currentPath);
+    }
+
+    // If folder is empty, add an empty directory entry
+    if (files.length === 0 && subfolders.length === 0) {
+      archive.append('', { name: `${currentPath}/` });
+    }
+  }
+
+  private getExtensionFromMimeType(mimeType: string): string | null {
+    const mimeToExt: Record<string, string> = {
+      // Documents
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.ms-powerpoint': 'ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'text/plain': 'txt',
+      'text/csv': 'csv',
+      'text/html': 'html',
+      'application/json': 'json',
+      'application/xml': 'xml',
+      // Images
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/bmp': 'bmp',
+      // Video
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/quicktime': 'mov',
+      'video/x-msvideo': 'avi',
+      // Audio
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+      'audio/ogg': 'ogg',
+      // Archives
+      'application/zip': 'zip',
+      'application/x-rar-compressed': 'rar',
+      'application/x-7z-compressed': '7z',
+      'application/gzip': 'gz',
+    };
+    return mimeToExt[mimeType] || null;
   }
 }
