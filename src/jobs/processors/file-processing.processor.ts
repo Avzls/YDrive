@@ -74,11 +74,13 @@ export class FileProcessingProcessor extends WorkerHost {
       await this.fileRepository.save(file);
       
       // Queue thumbnail job directly
-      await this.fileProcessingQueue.add('thumbnail', {
+      this.logger.log(`Queueing thumbnail job for ${fileId} after skipped scan`);
+      const thumbJob = await this.fileProcessingQueue.add('thumbnail', {
         fileId,
         storageKey,
         mimeType: file.mimeType,
       });
+      this.logger.log(`Thumbnail job queued with ID: ${thumbJob.id}`);
       return;
     }
 
@@ -185,14 +187,20 @@ export class FileProcessingProcessor extends WorkerHost {
    * Generate thumbnail for images and videos
    */
   private async processThumbnail(fileId: string, storageKey: string, mimeType: string): Promise<void> {
+    this.logger.log(`[Thumbnail] Starting for ${fileId}, mimeType: ${mimeType}`);
+    
     const file = await this.fileRepository.findOne({ where: { id: fileId } });
-    if (!file) return;
+    if (!file) {
+      this.logger.warn(`[Thumbnail] File not found: ${fileId}`);
+      return;
+    }
 
     const tempFile = path.join(this.tempDir, `${fileId}_thumb_src`);
     const thumbFile = path.join(this.tempDir, `${fileId}_thumb.webp`);
 
     try {
       // Download original file
+      this.logger.log(`[Thumbnail] Downloading file from MinIO: ${storageKey}`);
       const stream = await this.minioService.getObject('files', storageKey);
       const writeStream = fs.createWriteStream(tempFile);
       await new Promise<void>((resolve, reject) => {
@@ -200,8 +208,10 @@ export class FileProcessingProcessor extends WorkerHost {
         writeStream.on('finish', () => resolve());
         writeStream.on('error', reject);
       });
+      this.logger.log(`[Thumbnail] File downloaded to: ${tempFile}`);
 
       const thumbnailKey = `${fileId}/thumb.webp`;
+      let thumbnailGenerated = false;
 
       if (mimeType.startsWith('image/')) {
         // Image thumbnail with sharp
@@ -209,6 +219,7 @@ export class FileProcessingProcessor extends WorkerHost {
           .resize(200, 200, { fit: 'cover' })
           .webp({ quality: 80 })
           .toFile(thumbFile);
+        thumbnailGenerated = true;
       } else if (mimeType.startsWith('video/')) {
         // Video thumbnail with ffmpeg - extract frame at 1 second
         await execAsync(
@@ -217,6 +228,7 @@ export class FileProcessingProcessor extends WorkerHost {
         // Convert to webp
         await sharp(thumbFile).webp({ quality: 80 }).toFile(thumbFile + '.webp');
         fs.renameSync(thumbFile + '.webp', thumbFile);
+        thumbnailGenerated = true;
       } else if (mimeType.startsWith('audio/')) {
         // Audio waveform with ffmpeg
         await execAsync(
@@ -224,30 +236,39 @@ export class FileProcessingProcessor extends WorkerHost {
         );
         await sharp(thumbFile).webp({ quality: 80 }).toFile(thumbFile + '.webp');
         fs.renameSync(thumbFile + '.webp', thumbFile);
+        thumbnailGenerated = true;
       } else {
-        // No thumbnail for this type
-        this.logger.log(`No thumbnail generation for ${mimeType}`);
-        await this.finalize(fileId);
-        return;
+        // No thumbnail for this type (Office docs, etc.)
+        this.logger.log(`[Thumbnail] No thumbnail generation for ${mimeType}, will proceed to preview`);
       }
 
-      // Upload thumbnail to MinIO
-      const thumbBuffer = fs.readFileSync(thumbFile);
-      await this.minioService.uploadBuffer('thumbnails', thumbnailKey, thumbBuffer, 'image/webp');
+      if (thumbnailGenerated) {
+        // Upload thumbnail to MinIO
+        const thumbBuffer = fs.readFileSync(thumbFile);
+        await this.minioService.uploadBuffer('thumbnails', thumbnailKey, thumbBuffer, 'image/webp');
 
-      file.thumbnailKey = thumbnailKey;
-      await this.fileRepository.save(file);
-      this.logger.log(`Thumbnail generated for ${fileId}`);
+        file.thumbnailKey = thumbnailKey;
+        await this.fileRepository.save(file);
+        this.logger.log(`[Thumbnail] Thumbnail generated and saved for ${fileId}`);
+      }
 
-      // Queue preview job
+      // ALWAYS queue preview job - even for files without thumbnails (Office docs need PDF preview)
+      this.logger.log(`[Thumbnail] Queueing preview job for ${fileId} (mimeType: ${mimeType})`);
+      const previewJob = await this.fileProcessingQueue.add('preview', {
+        fileId,
+        storageKey,
+        mimeType,
+      });
+      this.logger.log(`[Thumbnail] Preview job queued with ID: ${previewJob.id}`);
+    } catch (error) {
+      this.logger.error(`[Thumbnail] Error for ${fileId}: ${error}`);
+      // Still try to queue preview job on thumbnail error
+      this.logger.log(`[Thumbnail] Queueing preview job after error for ${fileId}`);
       await this.fileProcessingQueue.add('preview', {
         fileId,
         storageKey,
         mimeType,
       });
-    } catch (error) {
-      this.logger.error(`Thumbnail error for ${fileId}: ${error}`);
-      await this.finalize(fileId);
     } finally {
       if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
       if (fs.existsSync(thumbFile)) fs.unlinkSync(thumbFile);
@@ -261,7 +282,22 @@ export class FileProcessingProcessor extends WorkerHost {
     const file = await this.fileRepository.findOne({ where: { id: fileId } });
     if (!file) return;
 
-    const tempFile = path.join(this.tempDir, `${fileId}_preview_src`);
+    // Get file extension based on mime type for Office files
+    const getExtension = (mime: string): string => {
+      const mimeToExt: Record<string, string> = {
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/vnd.ms-excel': '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+        'application/vnd.ms-powerpoint': '.ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+      };
+      return mimeToExt[mime] || '';
+    };
+
+    // Add extension for Office files so LibreOffice can detect format
+    const ext = this.isOfficeFile(mimeType) ? getExtension(mimeType) : '';
+    const tempFile = path.join(this.tempDir, `${fileId}_preview_src${ext}`);
     const previewFile = path.join(this.tempDir, `${fileId}_preview`);
 
     try {
@@ -291,26 +327,56 @@ export class FileProcessingProcessor extends WorkerHost {
           fs.unlinkSync(pngFile);
         }
       } else if (this.isOfficeFile(mimeType)) {
-        // Office file - convert to PDF with LibreOffice
-        const outputDir = path.dirname(previewFile);
-        await execAsync(
-          `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${tempFile}"`
-        );
-        const pdfFile = tempFile.replace(/\.[^.]+$/, '.pdf');
-        if (fs.existsSync(pdfFile)) {
-          // Convert PDF first page to PNG
-          await execAsync(
-            `pdftoppm -png -f 1 -l 1 -r 150 "${pdfFile}" "${previewFile}"`
+        // Office file - convert to PDF with LibreOffice and save full PDF for preview
+        const outputDir = this.tempDir;
+        this.logger.log(`Converting Office file to PDF: ${tempFile} (ext: ${ext})`);
+        
+        try {
+          const conversionResult = await execAsync(
+            `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${tempFile}" 2>&1`
           );
-          const pngFile = `${previewFile}-1.png`;
-          if (fs.existsSync(pngFile)) {
-            const buffer = fs.readFileSync(pngFile);
-            await this.minioService.uploadBuffer('previews', `${previewKey}.png`, buffer, 'image/png');
-            file.previewKey = `${previewKey}.png`;
-            hasPreview = true;
-            fs.unlinkSync(pngFile);
+          this.logger.log(`LibreOffice output: ${conversionResult.stdout || conversionResult.stderr || 'no output'}`);
+          
+          // LibreOffice outputs file with same name but .pdf extension
+          // For input: {fileId}_preview_src.docx -> output: {fileId}_preview_src.pdf
+          const inputBaseName = path.basename(tempFile); // e.g., "uuid_preview_src.docx"
+          const outputPdfName = inputBaseName.replace(/\.[^.]+$/, '.pdf'); // e.g., "uuid_preview_src.pdf"
+          const expectedPdfPath = path.join(outputDir, outputPdfName);
+          
+          // Log for debugging
+          this.logger.log(`Looking for PDF at: ${expectedPdfPath}`);
+          
+          // List all files in output dir for debugging
+          const allFiles = fs.readdirSync(outputDir);
+          this.logger.log(`Files in temp dir: ${allFiles.join(', ')}`);
+          
+          // Try expected path first, then search
+          let pdfFile: string | null = null;
+          
+          if (fs.existsSync(expectedPdfPath)) {
+            pdfFile = expectedPdfPath;
+          } else {
+            // Search for any PDF with our fileId
+            const pdfFiles = allFiles.filter(f => f.includes(fileId) && f.endsWith('.pdf'));
+            if (pdfFiles.length > 0) {
+              pdfFile = path.join(outputDir, pdfFiles[0]);
+            }
           }
-          fs.unlinkSync(pdfFile);
+          
+          if (pdfFile) {
+            // Save full PDF for preview
+            const pdfBuffer = fs.readFileSync(pdfFile);
+            await this.minioService.uploadBuffer('previews', `${previewKey}.pdf`, pdfBuffer, 'application/pdf');
+            file.previewKey = `${previewKey}.pdf`;
+            hasPreview = true;
+            fs.unlinkSync(pdfFile);
+            this.logger.log(`Office file converted to PDF preview: ${fileId} (${pdfFile})`);
+          } else {
+            this.logger.warn(`No PDF found for ${fileId}. Expected: ${expectedPdfPath}`);
+            this.logger.warn(`Available files: ${allFiles.join(', ')}`);
+          }
+        } catch (conversionError: any) {
+          this.logger.error(`LibreOffice conversion failed for ${fileId}: ${conversionError.message || conversionError}`);
         }
       } else if (mimeType.startsWith('video/')) {
         // Video preview - low-res version
@@ -339,6 +405,7 @@ export class FileProcessingProcessor extends WorkerHost {
       if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
     }
   }
+
 
   /**
    * Finalize processing - mark file as ready
