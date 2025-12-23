@@ -105,6 +105,53 @@ export class FilesController {
   }
 
   /**
+   * GET /files/trash
+   * List all trashed files
+   */
+  @Get('trash')
+  @ApiOperation({ summary: 'List trashed files' })
+  async listTrashed(@CurrentUser() user: User) {
+    return this.filesService.listTrashed(user.id);
+  }
+
+  /**
+   * GET /files/search?q=query
+   * Search files by name
+   */
+  @Get('search')
+  @ApiOperation({ summary: 'Search files' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  async searchFiles(
+    @Query('q') query: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.search(user.id, query);
+  }
+
+  /**
+   * GET /files/starred
+   * List all starred files
+   */
+  @Get('starred')
+  @ApiOperation({ summary: 'List starred files' })
+  async listStarred(@CurrentUser() user: User) {
+    return this.filesService.listStarred(user.id);
+  }
+
+  /**
+   * POST /files/:id/star
+   * Toggle starred status
+   */
+  @Post(':id/star')
+  @ApiOperation({ summary: 'Toggle file starred status' })
+  async toggleStar(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.toggleStar(id, user.id);
+  }
+
+  /**
    * GET /files/:id
    * Get file details
    */
@@ -269,5 +316,29 @@ export class FilesController {
   ) {
     await this.filesService.restore(id, user.id);
     return { message: 'File restored' };
+  }
+
+  /**
+   * DELETE /files/:id/permanent
+   * Permanently delete file from trash
+   */
+  @Delete(':id/permanent')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Permanently delete file' })
+  async permanentDelete(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.filesService.permanentDelete(id, user.id);
+  }
+
+  /**
+   * DELETE /files/trash/empty
+   * Empty all trash
+   */
+  @Delete('trash/empty')
+  @ApiOperation({ summary: 'Empty trash' })
+  async emptyTrash(@CurrentUser() user: User) {
+    return this.filesService.emptyTrash(user.id);
   }
 }

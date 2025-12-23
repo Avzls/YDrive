@@ -389,6 +389,56 @@ export class FilesService {
   }
 
   /**
+   * Search files by name
+   */
+  async search(userId: string, query: string): Promise<File[]> {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    return this.fileRepository
+      .createQueryBuilder('file')
+      .where('file.ownerId = :userId', { userId })
+      .andWhere('file.isTrashed = false')
+      .andWhere('LOWER(file.name) LIKE LOWER(:query)', { query: `%${query}%` })
+      .orderBy('file.name', 'ASC')
+      .limit(50)
+      .getMany();
+  }
+
+  /**
+   * Toggle starred status for file
+   */
+  async toggleStar(fileId: string, userId: string): Promise<{ isStarred: boolean }> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, ownerId: userId, isTrashed: false },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    file.isStarred = !file.isStarred;
+    await this.fileRepository.save(file);
+
+    return { isStarred: file.isStarred };
+  }
+
+  /**
+   * List all starred files for user
+   */
+  async listStarred(userId: string): Promise<File[]> {
+    return this.fileRepository.find({
+      where: {
+        ownerId: userId,
+        isStarred: true,
+        isTrashed: false,
+      },
+      order: { name: 'ASC' },
+    });
+  }
+
+  /**
    * Soft delete file (move to trash)
    */
   async softDelete(fileId: string, userId: string): Promise<void> {
@@ -420,6 +470,70 @@ export class FilesService {
     file.isTrashed = false;
     file.trashedAt = undefined;
     await this.fileRepository.save(file);
+  }
+
+  /**
+   * List all files in trash for user
+   */
+  async listTrashed(userId: string): Promise<File[]> {
+    return this.fileRepository.find({
+      where: {
+        ownerId: userId,
+        isTrashed: true,
+      },
+      order: { trashedAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Permanently delete file (remove from storage)
+   */
+  async permanentDelete(fileId: string, userId: string): Promise<void> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, ownerId: userId, isTrashed: true },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found in trash');
+    }
+
+    // Delete from MinIO
+    try {
+      await this.minioService.deleteObject('files', file.storageKey);
+      if (file.thumbnailKey) {
+        await this.minioService.deleteObject('thumbnails', file.thumbnailKey);
+      }
+      if (file.previewKey) {
+        await this.minioService.deleteObject('previews', file.previewKey);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to delete file from storage: ${error}`);
+    }
+
+    // Update user storage
+    await this.userRepository.decrement({ id: userId }, 'storageUsedBytes', file.sizeBytes);
+
+    // Delete file record
+    await this.fileRepository.delete(fileId);
+  }
+
+  /**
+   * Empty trash - permanently delete all trashed files
+   */
+  async emptyTrash(userId: string): Promise<{ deletedCount: number }> {
+    const trashedFiles = await this.listTrashed(userId);
+    let deletedCount = 0;
+
+    for (const file of trashedFiles) {
+      try {
+        await this.permanentDelete(file.id, userId);
+        deletedCount++;
+      } catch (error) {
+        this.logger.warn(`Failed to permanently delete file ${file.id}: ${error}`);
+      }
+    }
+
+    return { deletedCount };
   }
 
   private extractExtension(filename: string): string | undefined {
