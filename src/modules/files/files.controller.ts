@@ -251,9 +251,13 @@ export class FilesController {
 
       const { stream, fileName, mimeType, size } = await this.filesService.getFileStream(id, userId);
       
+      // Use RFC 5987 format for proper filename encoding
+      // Include both ASCII fallback and UTF-8 encoded version
+      const asciiFileName = fileName.replace(/[^\x20-\x7E]/g, '_');
+      
       res.set({
         'Content-Type': mimeType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+        'Content-Disposition': `attachment; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
         'Content-Length': size.toString(),
       });
 

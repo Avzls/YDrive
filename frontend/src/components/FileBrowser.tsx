@@ -97,9 +97,26 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   const handleDownload = async (file: FileItem) => {
     try {
       const url = await filesApi.getDownloadUrl(file.id);
-      window.open(url, '_blank');
+      
+      // Fetch as blob to handle cross-origin download with correct filename
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = file.name; // This will work since blob URL is same-origin
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up blob URL
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Download failed:', err);
+      toast.error('Failed to download file');
     }
   };
 
