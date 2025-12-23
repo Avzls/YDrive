@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import * as archiver from 'archiver';
@@ -6,6 +6,8 @@ import { PassThrough } from 'stream';
 import { Folder } from './entities/folder.entity';
 import { File } from '@modules/files/entities/file.entity';
 import { MinioService } from '@modules/storage/minio.service';
+import { PermissionsService } from '@modules/permissions/permissions.service';
+import { PermissionRole } from '@modules/permissions/entities/permission.entity';
 
 export interface CreateFolderDto {
   name: string;
@@ -20,6 +22,7 @@ export class FoldersService {
     @InjectRepository(File)
     private fileRepository: Repository<File>,
     private minioService: MinioService,
+    private permissionsService: PermissionsService,
   ) {}
 
   async create(dto: CreateFolderDto, userId: string): Promise<Folder> {
@@ -64,7 +67,7 @@ export class FoldersService {
 
   async findById(id: string, userId: string): Promise<Folder> {
     const folder = await this.folderRepository.findOne({
-      where: { id, ownerId: userId, isTrashed: false },
+      where: { id, isTrashed: false },
       relations: ['children', 'files'],
     });
 
@@ -72,15 +75,34 @@ export class FoldersService {
       throw new NotFoundException('Folder not found');
     }
 
+    if (folder.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, id, 'folder', PermissionRole.VIEWER);
+      if (!hasAccess) {
+        throw new NotFoundException('Folder not found or access denied');
+      }
+    }
+
     return folder;
   }
 
   async listContents(folderId: string | null, userId: string) {
+    if (folderId) {
+      // Check access to parent folder if not root
+      const folder = await this.folderRepository.findOne({ where: { id: folderId } });
+      if (!folder || folder.isTrashed) throw new NotFoundException('Folder not found');
+      
+      if (folder.ownerId !== userId) {
+        const hasAccess = await this.permissionsService.checkAccess(userId, folderId, 'folder', PermissionRole.VIEWER);
+        if (!hasAccess) throw new NotFoundException('Folder not found or access denied');
+      }
+    }
+
     const folders = await this.folderRepository.find({
       where: {
         parentId: folderId || IsNull(),
-        ownerId: userId,
         isTrashed: false,
+        // If root, only show owned folders. If subfolder, we already checked access to parent.
+        ...(folderId ? {} : { ownerId: userId }),
       },
       order: { name: 'ASC' },
     });
@@ -88,8 +110,8 @@ export class FoldersService {
     const files = await this.fileRepository.find({
       where: {
         folderId: folderId || IsNull(),
-        ownerId: userId,
         isTrashed: false,
+        ...(folderId ? {} : { ownerId: userId }),
       },
       order: { name: 'ASC' },
     });
@@ -98,22 +120,41 @@ export class FoldersService {
   }
 
   async rename(id: string, newName: string, userId: string): Promise<Folder> {
-    const folder = await this.findById(id, userId);
+    const folder = await this.folderRepository.findOne({ where: { id, isTrashed: false } });
+    if (!folder) throw new NotFoundException('Folder not found');
+
+    if (folder.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, id, 'folder', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to rename this folder');
+    }
+
     folder.name = newName;
     return this.folderRepository.save(folder);
   }
 
   async move(id: string, newParentId: string | null, userId: string): Promise<Folder> {
-    const folder = await this.findById(id, userId);
+    const folder = await this.folderRepository.findOne({ where: { id, isTrashed: false } });
+    if (!folder) throw new NotFoundException('Folder not found');
+
+    if (folder.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, id, 'folder', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to move this folder');
+    }
 
     // Prevent moving to self or descendant
     if (newParentId) {
       const newParent = await this.folderRepository.findOne({
-        where: { id: newParentId, ownerId: userId, isTrashed: false },
+        where: { id: newParentId, isTrashed: false }, // Don't filter by ownerId here, but check if user has access to target
       });
       if (!newParent) {
         throw new NotFoundException('Target folder not found');
       }
+
+      if (newParent.ownerId !== userId) {
+        const hasAccess = await this.permissionsService.checkAccess(userId, newParentId, 'folder', PermissionRole.EDITOR);
+        if (!hasAccess) throw new ForbiddenException('You do not have permission to move items into the target folder');
+      }
+
       if (newParent.path.includes(folder.id)) {
         throw new ConflictException('Cannot move folder into its own descendant');
       }
@@ -130,7 +171,13 @@ export class FoldersService {
   }
 
   async softDelete(id: string, userId: string): Promise<void> {
-    const folder = await this.findById(id, userId);
+    const folder = await this.folderRepository.findOne({ where: { id, isTrashed: false } });
+    if (!folder) throw new NotFoundException('Folder not found');
+
+    if (folder.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, id, 'folder', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to delete this folder');
+    }
     
     // Cascade soft delete to children folders
     await this.folderRepository
@@ -201,6 +248,26 @@ export class FoldersService {
   }
 
   /**
+   * Search folders by name
+   */
+  async search(userId: string, query: string): Promise<Folder[]> {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    // Search owned folders and folders where user has explicit permission
+    return this.folderRepository
+      .createQueryBuilder('folder')
+      .leftJoin('permissions', 'perm', 'perm.folder_id = folder.id AND perm.user_id = :userId', { userId })
+      .where('(folder.ownerId = :userId OR perm.id IS NOT NULL)', { userId })
+      .andWhere('folder.isTrashed = false')
+      .andWhere('LOWER(folder.name) LIKE LOWER(:query)', { query: `%${query}%` })
+      .orderBy('folder.name', 'ASC')
+      .limit(50)
+      .getMany();
+  }
+
+  /**
    * Permanently delete folder and its contents
    */
   async permanentDelete(id: string, userId: string): Promise<void> {
@@ -247,7 +314,13 @@ export class FoldersService {
    * Get folder as ZIP stream
    */
   async getZipStream(id: string, userId: string): Promise<{ stream: PassThrough; folderName: string }> {
-    const folder = await this.findById(id, userId);
+    const folder = await this.folderRepository.findOne({ where: { id, isTrashed: false } });
+    if (!folder) throw new NotFoundException('Folder not found');
+
+    if (folder.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, id, 'folder', PermissionRole.VIEWER);
+      if (!hasAccess) throw new NotFoundException('Folder not found or access denied');
+    }
     
     const passThrough = new PassThrough();
     const archive = archiver('zip', {
@@ -276,7 +349,6 @@ export class FoldersService {
     const files = await this.fileRepository.find({
       where: {
         folderId: folder.id,
-        ownerId: userId,
         isTrashed: false,
       },
     });
@@ -301,7 +373,6 @@ export class FoldersService {
     const subfolders = await this.folderRepository.find({
       where: {
         parentId: folder.id,
-        ownerId: userId,
         isTrashed: false,
       },
     });

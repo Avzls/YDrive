@@ -1,9 +1,10 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { Permission, PermissionRole } from './entities/permission.entity';
 import { Folder } from '@modules/folders/entities/folder.entity';
 import { File } from '@modules/files/entities/file.entity';
+import { User } from '@modules/users/entities/user.entity';
 
 @Injectable()
 export class PermissionsService {
@@ -20,6 +21,8 @@ export class PermissionsService {
     private folderRepository: Repository<Folder>,
     @InjectRepository(File)
     private fileRepository: Repository<File>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
   ) {}
 
   /**
@@ -120,6 +123,55 @@ export class PermissionsService {
     });
   }
 
+  /**
+   * List files and folders shared with a user
+   */
+  async listSharedWithMe(userId: string): Promise<{ files: File[]; folders: Folder[] }> {
+    // Get all permissions for this user
+    const permissions = await this.permissionRepository.find({
+      where: { userId },
+      relations: ['file', 'folder'],
+    });
+
+    const files: File[] = [];
+    const folders: Folder[] = [];
+
+    for (const perm of permissions) {
+      if (perm.file && !perm.file.isTrashed) {
+        files.push(perm.file);
+      }
+      if (perm.folder && !perm.folder.isTrashed && !perm.inheritedFrom) {
+        // Only show top-level shared folders (not inherited ones)
+        folders.push(perm.folder);
+      }
+    }
+
+    return { files, folders };
+  }
+
+  /**
+   * Search users by NIP or name for sharing
+   */
+  async searchUsers(query: string): Promise<{ id: string; nip: string; name: string; email: string }[]> {
+    if (!query || query.length < 2) return [];
+
+    const users = await this.userRepository.find({
+      where: [
+        { nip: ILike(`%${query}%`) },
+        { name: ILike(`%${query}%`) },
+        { email: ILike(`%${query}%`) },
+      ],
+      take: 10,
+    });
+
+    return users.map(u => ({
+      id: u.id,
+      nip: u.nip,
+      name: u.name,
+      email: u.email,
+    }));
+  }
+
   private async getDirectPermission(
     userId: string,
     resourceId: string,
@@ -174,3 +226,4 @@ export class PermissionsService {
     }
   }
 }
+

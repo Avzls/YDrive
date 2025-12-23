@@ -14,7 +14,7 @@ import {
   Upload
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { foldersApi, filesApi, Folder, FileItem, authApi } from '@/lib/api';
+import { foldersApi, filesApi, Folder, FileItem, authApi, permissionsApi } from '@/lib/api';
 import { Sidebar } from '@/components/Sidebar';
 import { SearchBar } from '@/components/SearchBar';
 import { FileBrowser } from '@/components/FileBrowser';
@@ -97,6 +97,11 @@ export default function HomePage() {
         const recentFiles = await filesApi.listRecent();
         setFolders([]);
         setFiles(recentFiles);
+      } else if (currentView === 'shared') {
+        // Load files/folders shared with current user
+        const sharedData = await permissionsApi.listSharedWithMe();
+        setFolders(sharedData.folders);
+        setFiles(sharedData.files);
       } else {
         // Normal drive view
         const data = await foldersApi.list(currentFolderId || undefined);
@@ -152,9 +157,12 @@ export default function HomePage() {
     
     setLoading(true);
     try {
-      const results = await filesApi.search(query);
-      setFiles(results);
-      setFolders([]); // Clear folders for search results
+      const [fileResults, folderResults] = await Promise.all([
+        filesApi.search(query),
+        foldersApi.search(query),
+      ]);
+      setFiles(fileResults);
+      setFolders(folderResults);
     } catch (err) {
       console.error('Search failed:', err);
     } finally {

@@ -81,6 +81,16 @@ export class FoldersController {
     return this.foldersService.listTrashed(user.id);
   }
 
+  @Get('search')
+  @ApiOperation({ summary: 'Search folders' })
+  @ApiQuery({ name: 'q', required: true })
+  async search(
+    @CurrentUser() user: User,
+    @Query('q') query: string,
+  ) {
+    return this.foldersService.search(user.id, query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get folder details' })
   async getFolder(
