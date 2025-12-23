@@ -11,7 +11,12 @@ import {
   FileSpreadsheet,
   Presentation,
   MoreVertical,
-  Loader2
+  Loader2,
+  Trash2,
+  FolderInput,
+  X,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -20,6 +25,7 @@ import { FilePreview } from './FilePreview';
 import { ShareModal } from './ShareModal';
 import { RenameModal } from './RenameModal';
 import { MoveModal } from './MoveModal';
+import { ConfirmModal } from './ConfirmModal';
 import { ContextMenu, getFileContextMenuItems, getFolderContextMenuItems, getTrashedFileContextMenuItems, getTrashedFolderContextMenuItems } from './ContextMenu';
 
 interface FileBrowserProps {
@@ -87,6 +93,105 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   const [renameItem, setRenameItem] = useState<{ type: 'file' | 'folder'; item: FileItem | Folder } | null>(null);
   const [moveItem, setMoveItem] = useState<{ type: 'file' | 'folder'; item: FileItem | Folder } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'file' | 'folder'; item: FileItem | Folder } | null>(null);
+  
+  // Multi-select state
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
+  const [showMoveSelected, setShowMoveSelected] = useState(false);
+
+  const hasSelection = selectedFiles.size > 0 || selectedFolders.size > 0;
+  const totalSelected = selectedFiles.size + selectedFolders.size;
+  const allSelected = selectedFiles.size === files.length && selectedFolders.size === folders.length && (files.length + folders.length) > 0;
+
+  const toggleFileSelection = (fileId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  };
+
+  const toggleFolderSelection = (folderId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedFiles(new Set(files.map(f => f.id)));
+    setSelectedFolders(new Set(folders.map(f => f.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
+  };
+
+  // Confirm delete modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleBulkDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const executeBulkDelete = async () => {
+    const total = selectedFiles.size + selectedFolders.size;
+    setShowDeleteConfirm(false);
+    
+    try {
+      // Delete files - use Promise.all for parallel execution
+      const filePromises = Array.from(selectedFiles).map(fileId => 
+        isTrashView ? filesApi.permanentDelete(fileId) : filesApi.delete(fileId)
+      );
+      // Delete folders
+      const folderPromises = Array.from(selectedFolders).map(folderId => 
+        isTrashView ? foldersApi.permanentDelete(folderId) : foldersApi.delete(folderId)
+      );
+      
+      await Promise.all([...filePromises, ...folderPromises]);
+      
+      toast.success(isTrashView 
+        ? `${total} item(s) permanently deleted` 
+        : `${total} item(s) moved to trash`
+      );
+      clearSelection();
+      onRefresh();
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      toast.error('Failed to delete some items');
+    }
+  };
+
+  const handleBulkMove = async (targetFolderId: string | null) => {
+    try {
+      // Move files
+      for (const fileId of selectedFiles) {
+        await filesApi.move(fileId, targetFolderId);
+      }
+      // Move folders
+      for (const folderId of selectedFolders) {
+        await foldersApi.move(folderId, targetFolderId);
+      }
+      toast.success(`${totalSelected} item(s) moved`);
+      clearSelection();
+      setShowMoveSelected(false);
+      onRefresh();
+    } catch (err) {
+      toast.error('Failed to move some items');
+    }
+  };
 
   const handleContextMenu = (e: React.MouseEvent, type: 'file' | 'folder', item: FileItem | Folder) => {
     e.preventDefault();
@@ -259,33 +364,132 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   if (viewMode === 'grid') {
     return (
       <>
+        {/* Selection Toolbar */}
+        {hasSelection && (
+          <div className="flex items-center gap-4 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <button
+              onClick={clearSelection}
+              className="p-1 hover:bg-blue-100 rounded"
+            >
+              <X className="w-5 h-5 text-blue-600" />
+            </button>
+            <span className="text-sm text-blue-700 font-medium">
+              {totalSelected} selected
+            </span>
+            <div className="flex-1" />
+            {!isTrashView && (
+              <button
+                onClick={() => setShowMoveSelected(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-100 rounded"
+              >
+                <FolderInput className="w-4 h-4" />
+                Move
+              </button>
+            )}
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded"
+            >
+              <Trash2 className="w-4 h-4" />
+              {isTrashView ? 'Delete Forever' : 'Delete'}
+            </button>
+          </div>
+        )}
+
+        {/* Select All checkbox */}
+        {(files.length > 0 || folders.length > 0) && (
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              onClick={allSelected ? clearSelection : selectAll}
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              {allSelected ? (
+                <CheckSquare className="w-5 h-5 text-blue-500" />
+              ) : (
+                <Square className="w-5 h-5" />
+              )}
+              {allSelected ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {/* Folders */}
-          {folders.map((folder) => (
-            <div
-              key={folder.id}
-              onClick={() => onFolderClick(folder.id)}
-              onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
-              className="file-card group flex flex-col items-center p-4 rounded-lg border border-transparent hover:border-gray-200 cursor-pointer"
-            >
-              <div className="w-12 h-12 mb-2 flex items-center justify-center">
-                <FolderIcon className="w-12 h-12 text-gray-400 fill-gray-100" />
+          {folders.map((folder) => {
+            const isSelected = selectedFolders.has(folder.id);
+            return (
+              <div
+                key={folder.id}
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey) {
+                    toggleFolderSelection(folder.id, e);
+                  } else if (!hasSelection) {
+                    onFolderClick(folder.id);
+                  } else {
+                    toggleFolderSelection(folder.id, e);
+                  }
+                }}
+                onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
+                className={`file-card group flex flex-col items-center p-4 rounded-lg border cursor-pointer relative ${
+                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-gray-200'
+                }`}
+              >
+                {/* Checkbox */}
+                <button
+                  onClick={(e) => toggleFolderSelection(folder.id, e)}
+                  className={`absolute top-2 left-2 p-0.5 rounded ${
+                    isSelected || hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                >
+                  {isSelected ? (
+                    <CheckSquare className="w-5 h-5 text-blue-500" />
+                  ) : (
+                    <Square className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
+                <div className="w-12 h-12 mb-2 flex items-center justify-center">
+                  <FolderIcon className="w-12 h-12 text-gray-400 fill-gray-100" />
+                </div>
+                <p className="text-sm text-gray-700 text-center truncate w-full">{folder.name}</p>
               </div>
-              <p className="text-sm text-gray-700 text-center truncate w-full">{folder.name}</p>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Files */}
           {files.map((file) => {
             const IconComponent = getFileIcon(file.mimeType);
             const iconColor = getFileIconColor(file.mimeType);
+            const isSelected = selectedFiles.has(file.id);
             return (
               <div
                 key={file.id}
-                onClick={() => file.status === 'ready' && setPreviewFile(file)}
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey) {
+                    toggleFileSelection(file.id, e);
+                  } else if (hasSelection) {
+                    toggleFileSelection(file.id, e);
+                  } else if (file.status === 'ready') {
+                    setPreviewFile(file);
+                  }
+                }}
                 onContextMenu={(e) => handleContextMenu(e, 'file', file)}
-                className="file-card group flex flex-col items-center p-4 rounded-lg border border-transparent hover:border-gray-200 cursor-pointer relative"
+                className={`file-card group flex flex-col items-center p-4 rounded-lg border cursor-pointer relative ${
+                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-gray-200'
+                }`}
               >
+                {/* Checkbox */}
+                <button
+                  onClick={(e) => toggleFileSelection(file.id, e)}
+                  className={`absolute top-2 left-2 p-0.5 rounded ${
+                    isSelected || hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                >
+                  {isSelected ? (
+                    <CheckSquare className="w-5 h-5 text-blue-500" />
+                  ) : (
+                    <Square className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
                 <div className="w-12 h-12 mb-2 flex items-center justify-center">
                   <IconComponent className={`w-12 h-12 ${iconColor}`} />
                 </div>
@@ -400,6 +604,31 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
             onClose={() => setMoveItem(null)}
           />
         )}
+
+        {/* Bulk Move Modal */}
+        {showMoveSelected && (
+          <MoveModal
+            itemName={`${totalSelected} item(s)`}
+            currentFolderId={undefined}
+            onMove={handleBulkMove}
+            onClose={() => setShowMoveSelected(false)}
+          />
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <ConfirmModal
+            title={isTrashView ? "Delete Forever" : "Delete Items"}
+            message={isTrashView 
+              ? `Permanently delete ${totalSelected} item(s)? This action cannot be undone.`
+              : `Move ${totalSelected} item(s) to trash?`
+            }
+            confirmLabel={isTrashView ? "Delete Forever" : "Delete"}
+            variant="danger"
+            onConfirm={executeBulkDelete}
+            onCancel={() => setShowDeleteConfirm(false)}
+          />
+        )}
       </>
     );
   }
@@ -407,47 +636,135 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   // List View
   return (
     <>
+      {/* Selection Toolbar */}
+      {hasSelection && (
+        <div className="flex items-center gap-4 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <button
+            onClick={clearSelection}
+            className="p-1 hover:bg-blue-100 rounded"
+          >
+            <X className="w-5 h-5 text-blue-600" />
+          </button>
+          <span className="text-sm text-blue-700 font-medium">
+            {totalSelected} selected
+          </span>
+          <div className="flex-1" />
+          {!isTrashView && (
+            <button
+              onClick={() => setShowMoveSelected(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-100 rounded"
+            >
+              <FolderInput className="w-4 h-4" />
+              Move
+            </button>
+          )}
+          <button
+            onClick={handleBulkDelete}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded"
+          >
+            <Trash2 className="w-4 h-4" />
+            {isTrashView ? 'Delete Forever' : 'Delete'}
+          </button>
+        </div>
+      )}
+
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         {/* Header */}
         <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-600">
-          <div className="col-span-6">Name</div>
+          <div className="col-span-6 flex items-center gap-3">
+            <button
+              onClick={allSelected ? clearSelection : selectAll}
+              className="p-0.5"
+            >
+              {allSelected ? (
+                <CheckSquare className="w-5 h-5 text-blue-500" />
+              ) : (
+                <Square className="w-5 h-5" />
+              )}
+            </button>
+            Name
+          </div>
           <div className="col-span-2">Owner</div>
           <div className="col-span-2">Last modified</div>
           <div className="col-span-2">File size</div>
         </div>
 
         {/* Folders */}
-        {folders.map((folder) => (
-          <div
-            key={folder.id}
-            onClick={() => onFolderClick(folder.id)}
-            onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
-            className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer items-center"
-          >
-            <div className="col-span-6 flex items-center gap-3">
-              <FolderIcon className="w-6 h-6 text-gray-400 fill-gray-100" />
-              <span className="text-gray-700 truncate">{folder.name}</span>
+        {folders.map((folder) => {
+          const isSelected = selectedFolders.has(folder.id);
+          return (
+            <div
+              key={folder.id}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  toggleFolderSelection(folder.id, e);
+                } else if (!hasSelection) {
+                  onFolderClick(folder.id);
+                } else {
+                  toggleFolderSelection(folder.id, e);
+                }
+              }}
+              onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
+              className={`grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 cursor-pointer items-center ${
+                isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+              }`}
+            >
+              <div className="col-span-6 flex items-center gap-3">
+                <button
+                  onClick={(e) => toggleFolderSelection(folder.id, e)}
+                  className="p-0.5"
+                >
+                  {isSelected ? (
+                    <CheckSquare className="w-5 h-5 text-blue-500" />
+                  ) : (
+                    <Square className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
+                <FolderIcon className="w-6 h-6 text-gray-400 fill-gray-100" />
+                <span className="text-gray-700 truncate">{folder.name}</span>
+              </div>
+              <div className="col-span-2 text-sm text-gray-500">me</div>
+              <div className="col-span-2 text-sm text-gray-500">
+                {format(new Date(folder.createdAt), 'MMM d, yyyy')}
+              </div>
+              <div className="col-span-2 text-sm text-gray-500">—</div>
             </div>
-            <div className="col-span-2 text-sm text-gray-500">me</div>
-            <div className="col-span-2 text-sm text-gray-500">
-              {format(new Date(folder.createdAt), 'MMM d, yyyy')}
-            </div>
-            <div className="col-span-2 text-sm text-gray-500">—</div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Files */}
         {files.map((file) => {
           const IconComponent = getFileIcon(file.mimeType);
           const iconColor = getFileIconColor(file.mimeType);
+          const isSelected = selectedFiles.has(file.id);
           return (
             <div
               key={file.id}
-              onClick={() => file.status === 'ready' && setPreviewFile(file)}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  toggleFileSelection(file.id, e);
+                } else if (hasSelection) {
+                  toggleFileSelection(file.id, e);
+                } else if (file.status === 'ready') {
+                  setPreviewFile(file);
+                }
+              }}
               onContextMenu={(e) => handleContextMenu(e, 'file', file)}
-              className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer items-center group"
+              className={`grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 cursor-pointer items-center group ${
+                isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+              }`}
             >
               <div className="col-span-6 flex items-center gap-3">
+                <button
+                  onClick={(e) => toggleFileSelection(file.id, e)}
+                  className="p-0.5"
+                >
+                  {isSelected ? (
+                    <CheckSquare className="w-5 h-5 text-blue-500" />
+                  ) : (
+                    <Square className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
                 <IconComponent className={`w-6 h-6 ${iconColor}`} />
                 <span className="text-gray-700 truncate">{file.name}</span>
                 {getStatusBadge(file.status)}
@@ -561,6 +878,31 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
           currentFolderId={moveItem.type === 'file' ? (moveItem.item as FileItem).folderId : (moveItem.item as Folder).parentId}
           onMove={moveItem.type === 'file' ? handleMoveFile : handleMoveFolder}
           onClose={() => setMoveItem(null)}
+        />
+      )}
+
+      {/* Bulk Move Modal */}
+      {showMoveSelected && (
+        <MoveModal
+          itemName={`${totalSelected} item(s)`}
+          currentFolderId={undefined}
+          onMove={handleBulkMove}
+          onClose={() => setShowMoveSelected(false)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <ConfirmModal
+          title={isTrashView ? "Delete Forever" : "Delete Items"}
+          message={isTrashView 
+            ? `Permanently delete ${totalSelected} item(s)? This action cannot be undone.`
+            : `Move ${totalSelected} item(s) to trash?`
+          }
+          confirmLabel={isTrashView ? "Delete Forever" : "Delete"}
+          variant="danger"
+          onConfirm={executeBulkDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
     </>
