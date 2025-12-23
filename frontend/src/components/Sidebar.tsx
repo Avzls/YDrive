@@ -13,6 +13,7 @@ import {
   FileUp,
   Menu,
   Clock,
+  Shield,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,6 +27,9 @@ interface SidebarProps {
 
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  
+  isAdmin?: boolean;
+  onAdminClick?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -45,6 +49,8 @@ export function Sidebar({
   storageQuota = 0,
   collapsed = false,
   onToggleCollapse,
+  isAdmin = false,
+  onAdminClick,
 }: SidebarProps) {
   const [showNewMenu, setShowNewMenu] = useState(false);
 
@@ -162,6 +168,17 @@ export function Sidebar({
             </button>
           );
         })}
+        
+        {/* Admin Link */}
+        {isAdmin && onAdminClick && (
+          <button
+            onClick={onAdminClick}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-full transition-colors mb-1 text-purple-700 hover:bg-purple-50 mt-2 border-t border-gray-200 pt-4"
+          >
+            <Shield className="w-5 h-5 text-purple-600" />
+            <span>Admin Panel</span>
+          </button>
+        )}
       </nav>
 
       {/* Storage with Progress Bar */}
