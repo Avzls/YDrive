@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #1f1f1f;
+  --primary: #1a73e8;
+  --primary-hover: #1557b0;
+  --border: #e0e0e0;
+  --surface: #f8f9fa;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Google Sans', 'Roboto', system-ui, sans-serif;
+}
+
+/* Custom scrollbar - Light theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Selection */
+::selection {
+  background: rgba(26, 115, 232, 0.3);
+  color: inherit;
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Button base styles */
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: background-color 0.15s;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+/* Card hover effect */
+.file-card {
+  transition: box-shadow 0.15s, background-color 0.15s;
+}
+
+.file-card:hover {
+  background-color: #f1f3f4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.file-card.selected {
+  background-color: #e8f0fe;
+  border-color: var(--primary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.15s ease-out;
+}
