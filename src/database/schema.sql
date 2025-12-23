@@ -11,6 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
+    nip VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
     avatar_url VARCHAR(500),
@@ -24,6 +25,7 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_nip ON users(nip);
 
 -- ============================================
 -- FOLDERS TABLE
@@ -192,11 +194,12 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
 
 -- ============================================
 -- INSERT DEFAULT ADMIN USER
--- Password: admin123 (bcrypt hash)
+-- Password: alvin123 (bcrypt hash)
 -- ============================================
-INSERT INTO users (email, password_hash, name, is_admin) VALUES (
-    'admin@company.local',
+INSERT INTO users (email, nip, password_hash, name, is_admin) VALUES (
+    'alvin@company.local',
+    '25129120',
     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.n3ELEtxRvJvPGi',
-    'Administrator',
+    'Alvin',
     true
 );

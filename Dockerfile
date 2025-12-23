@@ -16,9 +16,15 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install build dependencies for native modules (bcrypt)
+RUN apk add --no-cache python3 make g++
+
 # Install production dependencies only
 COPY package*.json ./
 RUN npm ci --only=production
+
+# Rebuild bcrypt for Alpine
+RUN npm rebuild bcrypt --build-from-source
 
 # Install ffmpeg, poppler-utils for file processing
 # Install fonts for LibreOffice to properly render text

@@ -7,7 +7,7 @@ import { User } from '@modules/users/entities/user.entity';
 import { ConfigService } from '@nestjs/config';
 
 export interface LoginDto {
-  email: string;
+  nip: string;
   password: string;
 }
 
@@ -26,9 +26,9 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<User | null> {
+  async validateUser(nip: string, password: string): Promise<User | null> {
     const user = await this.userRepository.findOne({
-      where: { email, isActive: true },
+      where: { nip, isActive: true },
     });
 
     if (user && await bcrypt.compare(password, user.passwordHash)) {
@@ -38,10 +38,10 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<TokenResponse> {
-    const user = await this.validateUser(dto.email, dto.password);
+    const user = await this.validateUser(dto.nip, dto.password);
     
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid NIP or password');
     }
 
     // Update last login
@@ -50,6 +50,7 @@ export class AuthService {
 
     const payload = {
       sub: user.id,
+      nip: user.nip,
       email: user.email,
       name: user.name,
       isAdmin: user.isAdmin,
