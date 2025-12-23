@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Body,
@@ -162,6 +163,34 @@ export class FilesController {
     @CurrentUser() user: User,
   ) {
     return this.filesService.findById(id);
+  }
+
+  /**
+   * PATCH /files/:id
+   * Rename file
+   */
+  @Patch(':id')
+  @ApiOperation({ summary: 'Rename file' })
+  async renameFile(
+    @Param('id') id: string,
+    @Body('name') name: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.rename(id, user.id, name);
+  }
+
+  /**
+   * PATCH /files/:id/move
+   * Move file to different folder
+   */
+  @Patch(':id/move')
+  @ApiOperation({ summary: 'Move file to different folder' })
+  async moveFile(
+    @Param('id') id: string,
+    @Body('folderId') folderId: string | null,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.move(id, user.id, folderId);
   }
 
   /**

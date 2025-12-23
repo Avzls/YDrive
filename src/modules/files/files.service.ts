@@ -439,6 +439,38 @@ export class FilesService {
   }
 
   /**
+   * Rename file
+   */
+  async rename(fileId: string, userId: string, newName: string): Promise<File> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, ownerId: userId, isTrashed: false },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    file.name = newName;
+    return this.fileRepository.save(file);
+  }
+
+  /**
+   * Move file to different folder
+   */
+  async move(fileId: string, userId: string, targetFolderId: string | null): Promise<File> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, ownerId: userId, isTrashed: false },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    file.folderId = targetFolderId ?? undefined;
+    return this.fileRepository.save(file);
+  }
+
+  /**
    * Soft delete file (move to trash)
    */
   async softDelete(fileId: string, userId: string): Promise<void> {
