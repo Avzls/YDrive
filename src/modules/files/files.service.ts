@@ -272,6 +272,10 @@ export class FilesService {
 
     const stream = await this.minioService.getObject('files', file.storageKey);
 
+    // Track file access
+    file.lastAccessedAt = new Date();
+    await this.fileRepository.save(file);
+
     return {
       stream,
       fileName: file.name,
@@ -348,6 +352,10 @@ export class FilesService {
         previewMimeType = 'video/mp4';
       }
     }
+
+    // Track file access
+    file.lastAccessedAt = new Date();
+    await this.fileRepository.save(file);
 
     return {
       stream,
@@ -435,6 +443,20 @@ export class FilesService {
         isTrashed: false,
       },
       order: { name: 'ASC' },
+    });
+  }
+
+  /**
+   * List recently accessed files for user
+   */
+  async listRecent(userId: string, limit: number = 20): Promise<File[]> {
+    return this.fileRepository.find({
+      where: {
+        ownerId: userId,
+        isTrashed: false,
+      },
+      order: { lastAccessedAt: { direction: 'DESC', nulls: 'LAST' } },
+      take: limit,
     });
   }
 

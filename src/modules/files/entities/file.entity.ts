@@ -105,6 +105,9 @@ export class File {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
+  @Column({ name: 'last_accessed_at', nullable: true })
+  lastAccessedAt?: Date;
+
   // Relations
   @OneToMany(() => FileVersion, (version) => version.file)
   versions: FileVersion[];

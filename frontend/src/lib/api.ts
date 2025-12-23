@@ -150,6 +150,12 @@ export const filesApi = {
     const { data } = await api.post<{ isStarred: boolean }>(`/files/${id}/star`);
     return data;
   },
+  listRecent: async (limit?: number) => {
+    const { data } = await api.get<FileItem[]>('/files/recent', { 
+      params: limit ? { limit } : {} 
+    });
+    return data;
+  },
   rename: async (id: string, name: string) => {
     const { data } = await api.patch<FileItem>(`/files/${id}`, { name });
     return data;

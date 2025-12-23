@@ -140,6 +140,20 @@ export class FilesController {
   }
 
   /**
+   * GET /files/recent
+   * List recently accessed files
+   */
+  @Get('recent')
+  @ApiOperation({ summary: 'List recently accessed files' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Number of files to return (default: 20)' })
+  async listRecent(
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+  ) {
+    return this.filesService.listRecent(user.id, limit ? parseInt(limit) : 20);
+  }
+
+  /**
    * POST /files/:id/star
    * Toggle starred status
    */

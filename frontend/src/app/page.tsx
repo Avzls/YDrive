@@ -33,7 +33,7 @@ export default function HomePage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([{ id: null, name: 'My Drive' }]);
-  const [currentView, setCurrentView] = useState<'drive' | 'shared' | 'starred' | 'trash'>('drive');
+  const [currentView, setCurrentView] = useState<'drive' | 'shared' | 'recent' | 'starred' | 'trash'>('drive');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -87,6 +87,11 @@ export default function HomePage() {
         ]);
         setFolders(starredFolders);
         setFiles(starredFiles);
+      } else if (currentView === 'recent') {
+        // Load recently accessed files
+        const recentFiles = await filesApi.listRecent();
+        setFolders([]);
+        setFiles(recentFiles);
       } else {
         // Normal drive view
         const data = await foldersApi.list(currentFolderId || undefined);

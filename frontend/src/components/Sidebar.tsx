@@ -12,11 +12,12 @@ import {
   FolderPlus,
   FileUp,
   Menu,
+  Clock,
 } from 'lucide-react';
 
 interface SidebarProps {
-  currentView: 'drive' | 'shared' | 'starred' | 'trash';
-  onViewChange: (view: 'drive' | 'shared' | 'starred' | 'trash') => void;
+  currentView: 'drive' | 'shared' | 'recent' | 'starred' | 'trash';
+  onViewChange: (view: 'drive' | 'shared' | 'recent' | 'starred' | 'trash') => void;
   onNewFolder: () => void;
   onUpload: () => void;
 
@@ -30,6 +31,7 @@ interface SidebarProps {
 const NAV_ITEMS = [
   { id: 'drive', label: 'My Drive', icon: HardDrive },
   { id: 'shared', label: 'Shared with me', icon: Users },
+  { id: 'recent', label: 'Recent', icon: Clock },
   { id: 'starred', label: 'Starred', icon: Star },
   { id: 'trash', label: 'Trash', icon: Trash2 },
 ] as const;
