@@ -11,6 +11,8 @@ interface AuthState {
     email: string;
     name: string;
     isAdmin: boolean;
+    storageQuotaBytes: number;
+    storageUsedBytes: number;
   } | null;
   setTokens: (accessToken: string, refreshToken: string) => void;
   setUser: (user: AuthState['user']) => void;

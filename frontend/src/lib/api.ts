@@ -37,6 +37,8 @@ export interface User {
   email: string;
   name: string;
   isAdmin: boolean;
+  storageQuotaBytes: number;
+  storageUsedBytes: number;
 }
 
 export interface FileItem {

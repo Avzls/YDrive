@@ -21,8 +21,8 @@ interface SidebarProps {
   onNewFolder: () => void;
   onUpload: () => void;
 
-  // ✅ masih dipakai untuk menampilkan "used"
   storageUsed?: number;
+  storageQuota?: number;
 
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -42,6 +42,7 @@ export function Sidebar({
   onNewFolder,
   onUpload,
   storageUsed = 0,
+  storageQuota = 0,
   collapsed = false,
   onToggleCollapse,
 }: SidebarProps) {
@@ -163,15 +164,28 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* Storage (Used + Unlimited) */}
+      {/* Storage with Progress Bar */}
       <div className="p-4 border-t border-gray-200">
         <div className="flex items-center gap-2 mb-2">
           <Cloud className="w-5 h-5 text-gray-500" />
           <span className="text-sm text-gray-600">Storage</span>
         </div>
 
+        {/* Progress Bar */}
+        {storageQuota > 0 && (
+          <div className="w-full h-1.5 bg-gray-200 rounded-full mb-2 overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all ${
+                (storageUsed / storageQuota) > 0.9 ? 'bg-red-500' :
+                (storageUsed / storageQuota) > 0.7 ? 'bg-yellow-500' : 'bg-blue-500'
+              }`}
+              style={{ width: `${Math.min((storageUsed / storageQuota) * 100, 100)}%` }}
+            />
+          </div>
+        )}
+
         <p className="text-xs text-gray-500">
-          {formatStorage(storageUsed)} used • Unlimited
+          {formatStorage(storageUsed)} of {storageQuota > 0 ? formatStorage(storageQuota) : 'Unlimited'}
         </p>
       </div>
     </aside>

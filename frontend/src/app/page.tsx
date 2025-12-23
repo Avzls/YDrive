@@ -287,6 +287,8 @@ export default function HomePage() {
           onViewChange={setCurrentView}
           onNewFolder={() => setShowNewFolder(true)}
           onUpload={handleUpload}
+          storageUsed={user?.storageUsedBytes || 0}
+          storageQuota={user?.storageQuotaBytes || 0}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
