@@ -115,8 +115,35 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
-            Default: NIP 25129120 / Password alvin123
+          {/* Quick Login Credentials */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <p className="text-sm text-gray-500 text-center mb-3">Demo Credentials (click to fill)</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => { setNip('00000001'); setPassword('admin123'); }}
+                className="p-2 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-center"
+              >
+                <div className="text-xs font-medium text-blue-600">Admin</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">00000001</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setNip('00000002'); setPassword('admin123'); }}
+                className="p-2 rounded-lg border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-all text-center"
+              >
+                <div className="text-xs font-medium text-green-600">User 1</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">00000002</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setNip('00000003'); setPassword('admin123'); }}
+                className="p-2 rounded-lg border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition-all text-center"
+              >
+                <div className="text-xs font-medium text-purple-600">User 2</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">00000003</div>
+              </button>
+            </div>
           </div>
         </div>
 
