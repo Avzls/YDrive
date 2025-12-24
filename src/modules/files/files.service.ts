@@ -420,23 +420,80 @@ export class FilesService {
   }
 
   /**
-   * Search files by name
+   * Search files with advanced filters
    */
-  async search(userId: string, query: string): Promise<File[]> {
-    if (!query || query.trim().length === 0) {
-      return [];
-    }
-
-    // Search owned files and files where user has explicit permission
-    return this.fileRepository
+  async search(userId: string, filters: {
+    query?: string;
+    type?: string;
+    modifiedAfter?: Date;
+    modifiedBefore?: Date;
+    minSize?: number;
+    maxSize?: number;
+    sortBy?: 'name' | 'updatedAt' | 'sizeBytes';
+    sortOrder?: 'ASC' | 'DESC';
+  }): Promise<File[]> {
+    const qb = this.fileRepository
       .createQueryBuilder('file')
       .leftJoin('permissions', 'perm', 'perm.file_id = file.id AND perm.user_id = :userId', { userId })
       .where('(file.ownerId = :userId OR perm.id IS NOT NULL)', { userId })
-      .andWhere('file.isTrashed = false')
-      .andWhere('LOWER(file.name) LIKE LOWER(:query)', { query: `%${query}%` })
-      .orderBy('file.name', 'ASC')
-      .limit(50)
-      .getMany();
+      .andWhere('file.isTrashed = false');
+
+    // Name search
+    if (filters.query && filters.query.trim().length > 0) {
+      qb.andWhere('LOWER(file.name) LIKE LOWER(:query)', { query: `%${filters.query}%` });
+    }
+
+    // Type filter (maps to MIME type categories)
+    if (filters.type) {
+      const mimePatterns: Record<string, string[]> = {
+        image: ['image/%'],
+        video: ['video/%'],
+        audio: ['audio/%'],
+        document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats%', 'text/%'],
+        archive: ['application/zip', 'application/x-rar%', 'application/x-7z%', 'application/gzip'],
+      };
+      const patterns = mimePatterns[filters.type];
+      if (patterns && patterns.length > 0) {
+        const conditions = patterns.map((p, i) => `file.mimeType LIKE :mime${i}`).join(' OR ');
+        const params: Record<string, string> = {};
+        patterns.forEach((p, i) => { params[`mime${i}`] = p; });
+        qb.andWhere(`(${conditions})`, params);
+      } else if (filters.type === 'other') {
+        // Exclude known types
+        qb.andWhere(`file.mimeType NOT LIKE 'image/%'`)
+          .andWhere(`file.mimeType NOT LIKE 'video/%'`)
+          .andWhere(`file.mimeType NOT LIKE 'audio/%'`)
+          .andWhere(`file.mimeType NOT LIKE 'application/pdf'`)
+          .andWhere(`file.mimeType NOT LIKE 'application/msword'`)
+          .andWhere(`file.mimeType NOT LIKE 'application/vnd.openxmlformats%'`)
+          .andWhere(`file.mimeType NOT LIKE 'text/%'`)
+          .andWhere(`file.mimeType NOT LIKE 'application/zip'`)
+          .andWhere(`file.mimeType NOT LIKE 'application/x-rar%'`);
+      }
+    }
+
+    // Date filters
+    if (filters.modifiedAfter) {
+      qb.andWhere('file.updatedAt >= :modifiedAfter', { modifiedAfter: filters.modifiedAfter });
+    }
+    if (filters.modifiedBefore) {
+      qb.andWhere('file.updatedAt <= :modifiedBefore', { modifiedBefore: filters.modifiedBefore });
+    }
+
+    // Size filters
+    if (filters.minSize !== undefined) {
+      qb.andWhere('file.sizeBytes >= :minSize', { minSize: filters.minSize });
+    }
+    if (filters.maxSize !== undefined) {
+      qb.andWhere('file.sizeBytes <= :maxSize', { maxSize: filters.maxSize });
+    }
+
+    // Sorting
+    const sortField = filters.sortBy || 'name';
+    const sortOrder = filters.sortOrder || 'ASC';
+    qb.orderBy(`file.${sortField}`, sortOrder);
+
+    return qb.limit(100).getMany();
   }
 
   /**

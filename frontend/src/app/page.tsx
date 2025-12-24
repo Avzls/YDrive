@@ -19,6 +19,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { SearchBar } from '@/components/SearchBar';
 import { FileBrowser } from '@/components/FileBrowser';
 import { ViewToggle } from '@/components/ViewToggle';
+import { SearchFiltersComponent, SearchFilters } from '@/components/SearchFilters';
 
 interface BreadcrumbItem {
   id: string | null;
@@ -37,6 +38,7 @@ export default function HomePage() {
   const [currentView, setCurrentView] = useState<'drive' | 'shared' | 'recent' | 'starred' | 'trash'>('drive');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -149,7 +151,20 @@ export default function HomePage() {
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
-    if (!query.trim()) {
+    performSearch(query, searchFilters);
+  };
+
+  const handleFiltersChange = (filters: SearchFilters) => {
+    setSearchFilters(filters);
+    performSearch(searchQuery, filters);
+  };
+
+  const performSearch = async (query: string, filters: SearchFilters) => {
+    // Check if any search criteria is active
+    const hasFilters = filters.type || filters.modifiedAfter || filters.minSize !== undefined || filters.maxSize !== undefined;
+    const hasQuery = query.trim().length > 0;
+    
+    if (!hasQuery && !hasFilters) {
       // Clear search, reload normal contents
       loadContents();
       return;
@@ -157,12 +172,18 @@ export default function HomePage() {
     
     setLoading(true);
     try {
-      const [fileResults, folderResults] = await Promise.all([
-        filesApi.search(query),
-        foldersApi.search(query),
-      ]);
+      const fileResults = await filesApi.search({
+        query: query || undefined,
+        ...filters,
+      });
       setFiles(fileResults);
-      setFolders(folderResults);
+      // For now, folder search stays simple (no filters)
+      if (hasQuery) {
+        const folderResults = await foldersApi.search(query);
+        setFolders(folderResults);
+      } else {
+        setFolders([]);
+      }
     } catch (err) {
       console.error('Search failed:', err);
     } finally {
@@ -278,8 +299,11 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Search Bar */}
-          <SearchBar onSearch={handleSearch} />
+          {/* Search Bar & Filters */}
+          <div className="flex items-center gap-2 flex-1">
+            <SearchBar onSearch={handleSearch} />
+            <SearchFiltersComponent filters={searchFilters} onFiltersChange={handleFiltersChange} />
+          </div>
 
           {/* Right Actions */}
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -376,8 +400,17 @@ export default function HomePage() {
           {/* Toolbar */}
           <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3">
             <div className="flex items-center justify-between">
-              {/* Breadcrumbs */}
+              {/* Back Button & Breadcrumbs */}
               <nav className="flex items-center gap-1 text-sm">
+                {breadcrumbs.length > 1 && (
+                  <button
+                    onClick={() => handleBreadcrumbClick(breadcrumbs.length - 2)}
+                    className="p-1.5 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                    title="Go back"
+                  >
+                    <ChevronRight className="w-5 h-5 text-gray-600 rotate-180" />
+                  </button>
+                )}
                 {breadcrumbs.map((item, index) => (
                   <div key={index} className="flex items-center">
                     {index > 0 && <ChevronRight className="w-4 h-4 text-gray-400 mx-1" />}

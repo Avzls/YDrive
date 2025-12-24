@@ -140,10 +140,6 @@ export const filesApi = {
     const { data } = await api.delete<{ deletedCount: number }>('/files/trash/empty');
     return data;
   },
-  search: async (query: string) => {
-    const { data } = await api.get<FileItem[]>('/files/search', { params: { q: query } });
-    return data;
-  },
   listStarred: async () => {
     const { data } = await api.get<FileItem[]>('/files/starred');
     return data;
@@ -164,6 +160,29 @@ export const filesApi = {
   },
   move: async (id: string, folderId: string | null) => {
     const { data } = await api.patch<FileItem>(`/files/${id}/move`, { folderId });
+    return data;
+  },
+  search: async (filters: {
+    query?: string;
+    type?: string;
+    modifiedAfter?: string;
+    modifiedBefore?: string;
+    minSize?: number;
+    maxSize?: number;
+    sortBy?: 'name' | 'updatedAt' | 'sizeBytes';
+    sortOrder?: 'ASC' | 'DESC';
+  }) => {
+    const params: Record<string, string | number> = {};
+    if (filters.query) params.q = filters.query;
+    if (filters.type) params.type = filters.type;
+    if (filters.modifiedAfter) params.modifiedAfter = filters.modifiedAfter;
+    if (filters.modifiedBefore) params.modifiedBefore = filters.modifiedBefore;
+    if (filters.minSize !== undefined) params.minSize = filters.minSize;
+    if (filters.maxSize !== undefined) params.maxSize = filters.maxSize;
+    if (filters.sortBy) params.sortBy = filters.sortBy;
+    if (filters.sortOrder) params.sortOrder = filters.sortOrder;
+    
+    const { data } = await api.get<FileItem[]>('/files/search', { params });
     return data;
   },
   listArchiveContents: async (id: string) => {

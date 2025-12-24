@@ -117,16 +117,39 @@ export class FilesController {
 
   /**
    * GET /files/search?q=query
-   * Search files by name
+   * Search files with advanced filters
    */
   @Get('search')
-  @ApiOperation({ summary: 'Search files' })
-  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  @ApiOperation({ summary: 'Search files with filters' })
+  @ApiQuery({ name: 'q', required: false, description: 'Search query (name)' })
+  @ApiQuery({ name: 'type', required: false, description: 'File type filter (image, video, document, audio, archive, other)' })
+  @ApiQuery({ name: 'modifiedAfter', required: false, description: 'Modified after date (ISO string)' })
+  @ApiQuery({ name: 'modifiedBefore', required: false, description: 'Modified before date (ISO string)' })
+  @ApiQuery({ name: 'minSize', required: false, description: 'Minimum file size in bytes' })
+  @ApiQuery({ name: 'maxSize', required: false, description: 'Maximum file size in bytes' })
+  @ApiQuery({ name: 'sortBy', required: false, description: 'Sort field (name, updatedAt, sizeBytes)' })
+  @ApiQuery({ name: 'sortOrder', required: false, description: 'Sort order (ASC, DESC)' })
   async searchFiles(
     @Query('q') query: string,
+    @Query('type') type: string,
+    @Query('modifiedAfter') modifiedAfter: string,
+    @Query('modifiedBefore') modifiedBefore: string,
+    @Query('minSize') minSize: string,
+    @Query('maxSize') maxSize: string,
+    @Query('sortBy') sortBy: string,
+    @Query('sortOrder') sortOrder: string,
     @CurrentUser() user: User,
   ) {
-    return this.filesService.search(user.id, query);
+    return this.filesService.search(user.id, {
+      query,
+      type,
+      modifiedAfter: modifiedAfter ? new Date(modifiedAfter) : undefined,
+      modifiedBefore: modifiedBefore ? new Date(modifiedBefore) : undefined,
+      minSize: minSize ? parseInt(minSize) : undefined,
+      maxSize: maxSize ? parseInt(maxSize) : undefined,
+      sortBy: sortBy as 'name' | 'updatedAt' | 'sizeBytes' | undefined,
+      sortOrder: sortOrder as 'ASC' | 'DESC' | undefined,
+    });
   }
 
   /**
