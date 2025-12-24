@@ -324,6 +324,15 @@ export class FileProcessingProcessor extends WorkerHost {
           await this.minioService.uploadBuffer('previews', `${previewKey}.png`, buffer, 'image/png');
           file.previewKey = `${previewKey}.png`;
           hasPreview = true;
+
+          // Generate thumbnail from the same PNG preview
+          const thumbBuffer = await sharp(buffer)
+            .resize(200, 200, { fit: 'cover' })
+            .webp({ quality: 80 })
+            .toBuffer();
+          await this.minioService.uploadBuffer('thumbnails', `${fileId}/thumb.webp`, thumbBuffer, 'image/webp');
+          file.thumbnailKey = `${fileId}/thumb.webp`;
+
           fs.unlinkSync(pngFile);
         }
       } else if (this.isOfficeFile(mimeType)) {
@@ -369,8 +378,29 @@ export class FileProcessingProcessor extends WorkerHost {
             await this.minioService.uploadBuffer('previews', `${previewKey}.pdf`, pdfBuffer, 'application/pdf');
             file.previewKey = `${previewKey}.pdf`;
             hasPreview = true;
+
+            // Generate thumbnail from the converted PDF
+            try {
+              const previewFile = path.join(this.tempDir, `${fileId}_office_thumb`);
+              await execAsync(
+                `pdftoppm -png -f 1 -l 1 -r 150 "${pdfFile}" "${previewFile}"`
+              );
+              const pngFile = `${previewFile}-1.png`;
+              if (fs.existsSync(pngFile)) {
+                const thumbBuffer = await sharp(pngFile)
+                  .resize(200, 200, { fit: 'cover' })
+                  .webp({ quality: 80 })
+                  .toBuffer();
+                await this.minioService.uploadBuffer('thumbnails', `${fileId}/thumb.webp`, thumbBuffer, 'image/webp');
+                file.thumbnailKey = `${fileId}/thumb.webp`;
+                fs.unlinkSync(pngFile);
+              }
+            } catch (thumbError) {
+              this.logger.warn(`Failed to generate thumbnail for Office file ${fileId}: ${thumbError}`);
+            }
+
             fs.unlinkSync(pdfFile);
-            this.logger.log(`Office file converted to PDF preview: ${fileId} (${pdfFile})`);
+            this.logger.log(`Office file converted to PDF preview and thumbnail generated: ${fileId} (${pdfFile})`);
           } else {
             this.logger.warn(`No PDF found for ${fileId}. Expected: ${expectedPdfPath}`);
             this.logger.warn(`Available files: ${allFiles.join(', ')}`);
