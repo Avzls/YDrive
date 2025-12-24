@@ -167,6 +167,19 @@ export class FilesController {
   }
 
   /**
+   * GET /files/archive/contents/:id
+   * List contents of a RAR or ZIP file
+   */
+  @Get('archive/contents/:id')
+  @ApiOperation({ summary: 'List contents of a RAR or ZIP archive' })
+  async listArchiveContents(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.listArchiveContents(id, user.id);
+  }
+
+  /**
    * GET /files/:id
    * Get file details
    */
@@ -336,6 +349,7 @@ export class FilesController {
       throw new UnauthorizedException('Invalid token');
     }
   }
+
 
   /**
    * DELETE /files/:id

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Download, ExternalLink, FileText } from 'lucide-react';
+import { X, Download, ExternalLink, FileText, Package, Folder, File } from 'lucide-react';
 import { FileItem, filesApi } from '@/lib/api';
+import { format } from 'date-fns';
 
 interface FilePreviewProps {
   file: FileItem;
@@ -53,12 +54,17 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
+  const [archiveContents, setArchiveContents] = useState<any[] | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   const isImage = file.mimeType.startsWith('image/');
   const isVideo = file.mimeType.startsWith('video/');
   const isPdf = file.mimeType === 'application/pdf';
   const isAudio = file.mimeType.startsWith('audio/');
   const isOffice = OFFICE_MIME_TYPES.includes(file.mimeType);
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  const isArchive = ['zip', 'rar'].includes(extension || '');
   const isText = isTextFile(file.mimeType, file.name);
 
   // For Office files, only show iframe if hasPreview is true
@@ -94,6 +100,25 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         .finally(() => setTextLoading(false));
     }
   }, [isText, previewUrl, textContent, textLoading]);
+
+  // Load archive contents
+  useEffect(() => {
+    if (isArchive && !archiveContents && !archiveLoading && !archiveError) {
+      setArchiveLoading(true);
+      filesApi.listArchiveContents(file.id)
+        .then(contents => {
+          // Sort: directories first, then by name
+          const sorted = [...contents].sort((a, b) => {
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            return a.name.localeCompare(b.name);
+          });
+          setArchiveContents(sorted);
+        })
+        .catch(err => setArchiveError(err.message))
+        .finally(() => setArchiveLoading(false));
+    }
+  }, [isArchive, file.id, archiveContents, archiveLoading, archiveError]);
 
   const handleDownload = async () => {
     const url = await filesApi.getDownloadUrl(file.id);
@@ -294,6 +319,74 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
       );
     }
 
+    if (isArchive) {
+      if (archiveLoading) {
+        return (
+          <div className="bg-slate-800 p-8 rounded-lg shadow-2xl text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+            <p className="text-white">Membaca isi arsip...</p>
+          </div>
+        );
+      }
+
+      if (archiveError) {
+        return (
+          <div className="bg-slate-800 p-8 rounded-lg shadow-2xl text-center">
+            <p className="text-red-400 mb-4">Gagal memuat isi arsip: {archiveError}</p>
+            <button
+              onClick={handleDownload}
+              className="px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2 mx-auto"
+            >
+              <Download className="w-5 h-5" />
+              Download File
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <div className="bg-slate-800 rounded-lg shadow-2xl overflow-hidden max-w-5xl w-[90vw]">
+          <div className="px-4 py-3 bg-slate-700 border-b border-slate-600 flex items-center gap-2">
+            <Package className="w-5 h-5 text-purple-400" />
+            <p className="text-white font-medium">{file.name}</p>
+          </div>
+          <div className="overflow-auto max-h-[75vh]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-700/50 sticky top-0 backdrop-blur-md">
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="px-4 py-2 text-left font-medium">Nama</th>
+                  <th className="px-4 py-2 text-right font-medium">Ukuran</th>
+                  <th className="px-4 py-2 text-right font-medium">Modifikasi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {archiveContents?.map((item, index) => (
+                  <tr key={index} className="border-t border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                    <td className="px-4 py-2 text-slate-200">
+                      <div className="flex items-center gap-2">
+                        {item.isDirectory ? (
+                          <Folder className="w-4 h-4 text-blue-400 fill-blue-400/20" />
+                        ) : (
+                          <File className="w-4 h-4 text-slate-400" />
+                        )}
+                        <span className="truncate max-w-md">{item.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-400 font-mono">
+                      {item.isDirectory ? '-' : formatBytes(item.size)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-500 text-xs">
+                      {item.mtime ? format(new Date(item.mtime), 'dd MMM yyyy HH:mm') : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
     // Unsupported file type
     return (
       <div className="bg-slate-800 p-8 rounded-lg shadow-2xl text-center max-w-lg">
@@ -362,3 +455,11 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
   );
 }
 
+function formatBytes(bytes: number, decimals = 2) {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}

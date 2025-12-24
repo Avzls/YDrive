@@ -166,6 +166,10 @@ export const filesApi = {
     const { data } = await api.patch<FileItem>(`/files/${id}/move`, { folderId });
     return data;
   },
+  listArchiveContents: async (id: string) => {
+    const { data } = await api.get<any[]>(`/files/archive/contents/${id}`);
+    return data;
+  },
 };
 
 // Folders

@@ -12,6 +12,8 @@ import { User } from '@modules/users/entities/user.entity';
 import { ConfigService } from '@nestjs/config';
 import { PermissionsService } from '@modules/permissions/permissions.service';
 import { PermissionRole } from '@modules/permissions/entities/permission.entity';
+import * as AdmZip from 'adm-zip';
+import { createExtractorFromData } from 'node-unrar-js';
 
 @Injectable()
 export class FilesService {
@@ -647,5 +649,60 @@ export class FilesService {
   private extractExtension(filename: string): string | undefined {
     const parts = filename.split('.');
     return parts.length > 1 ? parts.pop()?.toLowerCase() : undefined;
+  }
+
+  /**
+   * List contents of an archive file (RAR, ZIP)
+   */
+  async listArchiveContents(fileId: string, userId: string): Promise<any[]> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+
+    // Permission check
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) throw new NotFoundException('File not found or access denied');
+    }
+
+    const stream = await this.minioService.getObject('files', file.storageKey);
+    const buffer: Buffer = await new Promise((resolve, reject) => {
+      const chunks: any[] = [];
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('error', reject);
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    const extension = file.extension?.toLowerCase() || this.extractExtension(file.name);
+
+    if (extension === 'zip') {
+      try {
+        const zip = new AdmZip(buffer);
+        return zip.getEntries().map((entry: any) => ({
+          name: entry.entryName,
+          size: entry.header.size,
+          isDirectory: entry.isDirectory,
+          mtime: entry.header.time,
+        }));
+      } catch (err) {
+        throw new BadRequestException('Failed to parse ZIP file: ' + err.message);
+      }
+    } else if (extension === 'rar') {
+      try {
+        // node-unrar-js needs Uint8Array or ArrayBuffer
+        const extractor = await createExtractorFromData({ data: new Uint8Array(buffer).buffer });
+        const list = extractor.getFileList();
+        const fileHeaders = [...list.fileHeaders];
+        return fileHeaders.map(header => ({
+          name: header.name,
+          size: header.unpSize,
+          isDirectory: header.flags.directory,
+          mtime: header.time,
+        }));
+      } catch (err) {
+        throw new BadRequestException('Failed to parse RAR file: ' + err.message);
+      }
+    } else {
+      throw new BadRequestException('Unsupported archive format: ' + extension);
+    }
   }
 }

@@ -28,6 +28,8 @@ import { MoveModal } from './MoveModal';
 import { ConfirmModal } from './ConfirmModal';
 import { ContextMenu, getFileContextMenuItems, getFolderContextMenuItems, getTrashedFileContextMenuItems, getTrashedFolderContextMenuItems } from './ContextMenu';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+
 interface FileBrowserProps {
   folders: Folder[];
   files: FileItem[];
@@ -524,10 +526,28 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                     <Square className="w-5 h-5 text-gray-400" />
                   )}
                 </button>
-                <div className="w-12 h-12 mb-2 flex items-center justify-center">
-                  <IconComponent className={`w-12 h-12 ${iconColor}`} />
+                <div className="w-full aspect-video mb-2 flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden border border-gray-100 relative group-hover:border-gray-300 transition-colors">
+                  {file.thumbnailKey ? (
+                    <img
+                      src={`${API_BASE}/files/${file.id}/thumbnail?token=${typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''}`}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // If thumbnail fails, fallback to icon
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const iconContainer = target.parentElement?.querySelector('.fallback-icon') as HTMLElement;
+                        if (iconContainer) iconContainer.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div 
+                    className={`fallback-icon w-full h-full flex items-center justify-center ${file.thumbnailKey ? 'hidden' : ''}`}
+                  >
+                    <IconComponent className={`w-12 h-12 ${iconColor}`} />
+                  </div>
                 </div>
-                <p className="text-sm text-gray-700 text-center truncate w-full">{file.name}</p>
+                <p className="text-sm text-gray-700 text-center truncate w-full px-1">{file.name}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <span className="text-xs text-gray-400">{formatFileSize(file.sizeBytes)}</span>
                   {getStatusBadge(file.status)}
@@ -800,7 +820,17 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                     <Square className="w-5 h-5 text-gray-400" />
                   )}
                 </button>
-                <IconComponent className={`w-6 h-6 ${iconColor}`} />
+                {file.thumbnailKey ? (
+                  <div className="w-10 h-10 rounded border border-gray-200 overflow-hidden flex-shrink-0">
+                    <img
+                      src={`${API_BASE}/files/${file.id}/thumbnail?token=${typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''}`}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <IconComponent className={`w-6 h-6 ${iconColor}`} />
+                )}
                 <span className="text-gray-700 truncate">{file.name}</span>
                 {getStatusBadge(file.status)}
               </div>
