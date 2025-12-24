@@ -86,7 +86,7 @@
 
 1. **Clone repository**
    ```bash
-   git clone https://github.com/your-username/YDrive.git
+   git clone https://github.com/Avzls/YDrive.git
    cd YDrive/file-storage
    ```
 
