@@ -189,6 +189,27 @@ export const filesApi = {
     const { data } = await api.get<any[]>(`/files/archive/contents/${id}`);
     return data;
   },
+  // Version History
+  listVersions: async (fileId: string) => {
+    const { data } = await api.get<any[]>(`/files/${fileId}/versions`);
+    return data;
+  },
+  getVersionDownloadUrl: (versionId: string) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
+    return `${API_BASE}/files/versions/${versionId}/stream?token=${token}`;
+  },
+  restoreVersion: async (versionId: string) => {
+    const { data } = await api.post<FileItem>(`/files/versions/${versionId}/restore`);
+    return data;
+  },
+  uploadNewVersion: async (fileId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post<FileItem>(`/files/${fileId}/version`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
 };
 
 // Folders

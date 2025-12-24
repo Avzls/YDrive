@@ -152,4 +152,21 @@ export class MinioService implements OnModuleInit {
   async getObjectStat(bucket: 'files' | 'thumbnails' | 'previews' | 'temp', objectKey: string) {
     return this.client.statObject(this.buckets[bucket], objectKey);
   }
+
+  /**
+   * Copy object within or across buckets
+   */
+  async copyObject(
+    sourceBucket: 'files' | 'thumbnails' | 'previews' | 'temp',
+    sourceKey: string,
+    destBucket: 'files' | 'thumbnails' | 'previews' | 'temp',
+    destKey: string,
+  ): Promise<void> {
+    await this.client.copyObject(
+      this.buckets[destBucket],
+      destKey,
+      `/${this.buckets[sourceBucket]}/${sourceKey}`,
+      new Minio.CopyConditions(),
+    );
+  }
 }

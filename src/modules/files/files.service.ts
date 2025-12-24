@@ -216,6 +216,93 @@ export class FilesService {
   }
 
   /**
+   * Upload a new version of an existing file
+   */
+  async uploadNewVersion(
+    fileId: string,
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<CompleteUploadResponseDto> {
+    // Find existing file
+    const existingFile = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!existingFile) throw new NotFoundException('File not found');
+
+    // Permission check - need editor access
+    if (existingFile.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to update this file');
+    }
+
+    // Get current max version number
+    const maxVersion = await this.fileVersionRepository
+      .createQueryBuilder('v')
+      .where('v.fileId = :fileId', { fileId })
+      .select('MAX(v.versionNumber)', 'max')
+      .getRawOne();
+    const newVersionNumber = (maxVersion?.max || 0) + 1;
+
+    // Create new storage key with version number
+    const newStorageKey = `${fileId}/v${newVersionNumber}_${existingFile.name}`;
+
+    // Upload to MinIO
+    await this.minioService.uploadBuffer(
+      'files',
+      newStorageKey,
+      file.buffer,
+      file.mimetype,
+    );
+
+    // Create new version record
+    const version = this.fileVersionRepository.create({
+      fileId,
+      versionNumber: newVersionNumber,
+      storageKey: newStorageKey,
+      sizeBytes: file.size,
+      uploadedById: userId,
+      comment: `Version ${newVersionNumber} uploaded`,
+    });
+    await this.fileVersionRepository.save(version);
+
+    // Update file to point to new version
+    const oldSize = existingFile.sizeBytes;
+    existingFile.currentVersionId = version.id;
+    existingFile.storageKey = newStorageKey;
+    existingFile.sizeBytes = file.size;
+    existingFile.mimeType = file.mimetype;
+    existingFile.updatedAt = new Date();
+    existingFile.status = FileStatus.SCANNING;
+    await this.fileRepository.save(existingFile);
+
+    // Update user storage (add diff)
+    const sizeDiff = file.size - Number(oldSize);
+    if (sizeDiff > 0) {
+      await this.userRepository.increment({ id: existingFile.ownerId }, 'storageUsedBytes', sizeDiff);
+    } else if (sizeDiff < 0) {
+      await this.userRepository.decrement({ id: existingFile.ownerId }, 'storageUsedBytes', Math.abs(sizeDiff));
+    }
+
+    // Queue processing jobs
+    await this.fileProcessingQueue.add('virus-scan', {
+      fileId: existingFile.id,
+      storageKey: newStorageKey,
+      mimeType: file.mimetype,
+    }, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+    });
+
+    this.logger.log(`Uploaded new version ${newVersionNumber} for file: ${fileId}`);
+
+    return {
+      id: existingFile.id,
+      name: existingFile.name,
+      status: existingFile.status,
+      mimeType: existingFile.mimeType,
+      sizeBytes: existingFile.sizeBytes,
+    };
+  }
+
+  /**
    * Get presigned download URL for file
    */
   async getDownloadUrl(fileId: string, userId: string): Promise<{ downloadUrl: string; fileName: string }> {
@@ -761,5 +848,113 @@ export class FilesService {
     } else {
       throw new BadRequestException('Unsupported archive format: ' + extension);
     }
+  }
+
+  /**
+   * List all versions of a file
+   */
+  async listVersions(fileId: string, userId: string): Promise<FileVersion[]> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+
+    // Permission check
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) throw new NotFoundException('File not found or access denied');
+    }
+
+    return this.fileVersionRepository.find({
+      where: { fileId },
+      relations: ['uploadedBy'],
+      order: { versionNumber: 'DESC' },
+    });
+  }
+
+  /**
+   * Get a specific version's stream for download
+   */
+  async getVersionStream(versionId: string, userId: string): Promise<{
+    stream: NodeJS.ReadableStream;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }> {
+    const version = await this.fileVersionRepository.findOne({
+      where: { id: versionId },
+      relations: ['file'],
+    });
+    if (!version) throw new NotFoundException('Version not found');
+
+    const file = version.file;
+    if (!file) throw new NotFoundException('File not found');
+
+    // Permission check
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, file.id, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) throw new NotFoundException('File not found or access denied');
+    }
+
+    const stream = await this.minioService.getObject('files', version.storageKey);
+    return {
+      stream,
+      fileName: `v${version.versionNumber}_${file.name}`,
+      mimeType: file.mimeType,
+      size: Number(version.sizeBytes),
+    };
+  }
+
+  /**
+   * Restore a file to a specific version (creates a new version from the old one)
+   */
+  async restoreVersion(versionId: string, userId: string): Promise<File> {
+    const version = await this.fileVersionRepository.findOne({
+      where: { id: versionId },
+      relations: ['file'],
+    });
+    if (!version) throw new NotFoundException('Version not found');
+
+    const file = version.file;
+    if (!file) throw new NotFoundException('File not found');
+
+    // Permission check - need editor access to restore
+    if (file.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, file.id, 'file', PermissionRole.EDITOR);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to restore this file');
+    }
+
+    // Get current max version number
+    const maxVersion = await this.fileVersionRepository
+      .createQueryBuilder('v')
+      .where('v.fileId = :fileId', { fileId: file.id })
+      .select('MAX(v.versionNumber)', 'max')
+      .getRawOne();
+    const newVersionNumber = (maxVersion?.max || 0) + 1;
+
+    // Copy the old version's storage key to a new key
+    const newStorageKey = `${file.id}/v${newVersionNumber}_${file.name}`;
+    await this.minioService.copyObject('files', version.storageKey, 'files', newStorageKey);
+
+    // Create new version record
+    const newVersion = this.fileVersionRepository.create({
+      fileId: file.id,
+      versionNumber: newVersionNumber,
+      storageKey: newStorageKey,
+      sizeBytes: version.sizeBytes,
+      checksumSha256: version.checksumSha256,
+      thumbnailKey: version.thumbnailKey,
+      previewKey: version.previewKey,
+      uploadedById: userId,
+      comment: `Restored from version ${version.versionNumber}`,
+    });
+    await this.fileVersionRepository.save(newVersion);
+
+    // Update file to point to new version
+    file.currentVersionId = newVersion.id;
+    file.storageKey = newStorageKey;
+    file.sizeBytes = version.sizeBytes;
+    file.updatedAt = new Date();
+    await this.fileRepository.save(file);
+
+    return file;
   }
 }
