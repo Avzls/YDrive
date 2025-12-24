@@ -140,6 +140,33 @@ export const filesApi = {
     const { data } = await api.delete<{ deletedCount: number }>('/files/trash/empty');
     return data;
   },
+  bulkDownload: async (fileIds: string[]) => {
+    const ids = fileIds.join(',');
+    const response = await api.get('/files/bulk-download', {
+      params: { ids },
+      responseType: 'blob',
+    });
+    
+    // Create download link
+    const blob = new Blob([response.data], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Get filename from header or use default
+    const contentDisposition = response.headers['content-disposition'];
+    let fileName = 'download.zip';
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/);
+      if (match) fileName = match[1];
+    }
+    
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
   listStarred: async () => {
     const { data } = await api.get<FileItem[]>('/files/starred');
     return data;
@@ -160,6 +187,10 @@ export const filesApi = {
   },
   move: async (id: string, folderId: string | null) => {
     const { data } = await api.patch<FileItem>(`/files/${id}/move`, { folderId });
+    return data;
+  },
+  copy: async (id: string, folderId: string | null) => {
+    const { data } = await api.post<FileItem>(`/files/${id}/copy`, { folderId });
     return data;
   },
   search: async (filters: {
@@ -489,5 +520,102 @@ export const auditApi = {
   },
 };
 
-export default api;
+// Tags
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  ownerId: string;
+  createdAt: string;
+}
 
+export const tagsApi = {
+  // List all tags for current user
+  list: async () => {
+    const { data } = await api.get<Tag[]>('/tags');
+    return data;
+  },
+  // Create a new tag
+  create: async (name: string, color?: string) => {
+    const { data } = await api.post<Tag>('/tags', { name, color });
+    return data;
+  },
+  // Update tag
+  update: async (id: string, updates: { name?: string; color?: string }) => {
+    const { data } = await api.patch<Tag>(`/tags/${id}`, updates);
+    return data;
+  },
+  // Delete tag
+  delete: async (id: string) => {
+    await api.delete(`/tags/${id}`);
+  },
+  // Get files by tag
+  getFilesByTag: async (tagId: string) => {
+    const { data } = await api.get<FileItem[]>(`/tags/${tagId}/files`);
+    return data;
+  },
+  // Get tags for a file
+  getFileTags: async (fileId: string) => {
+    const { data } = await api.get<Tag[]>(`/files/${fileId}/tags`);
+    return data;
+  },
+  // Add tags to a file
+  addTagsToFile: async (fileId: string, tagIds: string[]) => {
+    const { data } = await api.post<FileItem>(`/files/${fileId}/tags`, { tagIds });
+    return data;
+  },
+  // Set tags for a file (replace all)
+  setFileTags: async (fileId: string, tagIds: string[]) => {
+    const { data } = await api.patch<FileItem>(`/files/${fileId}/tags`, { tagIds });
+    return data;
+  },
+  // Remove tags from a file
+  removeTagsFromFile: async (fileId: string, tagIds: string[]) => {
+    const { data } = await api.delete<FileItem>(`/files/${fileId}/tags`, { data: { tagIds } });
+    return data;
+  },
+};
+
+// Comments
+export interface Comment {
+  id: string;
+  content: string;
+  fileId: string;
+  userId: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const commentsApi = {
+  // List comments for a file
+  list: async (fileId: string) => {
+    const { data } = await api.get<Comment[]>(`/files/${fileId}/comments`);
+    return data;
+  },
+  // Add a comment
+  create: async (fileId: string, content: string) => {
+    const { data } = await api.post<Comment>(`/files/${fileId}/comments`, { content });
+    return data;
+  },
+  // Update a comment
+  update: async (fileId: string, commentId: string, content: string) => {
+    const { data } = await api.patch<Comment>(`/files/${fileId}/comments/${commentId}`, { content });
+    return data;
+  },
+  // Delete a comment
+  delete: async (fileId: string, commentId: string) => {
+    await api.delete(`/files/${fileId}/comments/${commentId}`);
+  },
+  // Get comment count
+  getCount: async (fileId: string) => {
+    const { data } = await api.get<{ count: number }>(`/files/${fileId}/comments/count`);
+    return data.count;
+  },
+};
+
+export default api;

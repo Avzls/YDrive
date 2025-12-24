@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { FilesController } from './files.controller';
@@ -7,6 +7,7 @@ import { File } from './entities/file.entity';
 import { FileVersion } from './entities/file-version.entity';
 import { User } from '@modules/users/entities/user.entity';
 import { StorageModule } from '@modules/storage/storage.module';
+import { TagsModule } from '@modules/tags/tags.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { StorageModule } from '@modules/storage/storage.module';
       name: 'file-processing',
     }),
     StorageModule,
+    forwardRef(() => TagsModule),
   ],
   controllers: [FilesController],
   providers: [FilesService],

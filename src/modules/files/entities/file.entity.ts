@@ -6,11 +6,13 @@ import {
   UpdateDateColumn,
   ManyToOne,
   OneToMany,
+  ManyToMany,
   JoinColumn,
 } from 'typeorm';
 import { User } from '@modules/users/entities/user.entity';
 import { FileVersion } from './file-version.entity';
 import { Folder } from '@modules/folders/entities/folder.entity';
+import { Tag } from '@modules/tags/entities/tag.entity';
 
 export enum FileStatus {
   UPLOADING = 'uploading',
@@ -111,4 +113,7 @@ export class File {
   // Relations
   @OneToMany(() => FileVersion, (version) => version.file)
   versions: FileVersion[];
+
+  @ManyToMany(() => Tag, (tag) => tag.files)
+  tags: Tag[];
 }

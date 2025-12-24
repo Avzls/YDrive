@@ -16,7 +16,8 @@ import {
   FolderInput,
   X,
   CheckSquare,
-  Square
+  Square,
+  Download
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -27,6 +28,9 @@ import { RenameModal } from './RenameModal';
 import { MoveModal } from './MoveModal';
 import { ConfirmModal } from './ConfirmModal';
 import { VersionHistoryModal } from './VersionHistoryModal';
+import { TagsModal } from './TagsModal';
+import { CommentsModal } from './CommentsModal';
+import { FileDetailsModal } from './FileDetailsModal';
 import { ContextMenu, getFileContextMenuItems, getFolderContextMenuItems, getTrashedFileContextMenuItems, getTrashedFolderContextMenuItems } from './ContextMenu';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -95,15 +99,23 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   const [renameItem, setRenameItem] = useState<{ type: 'file' | 'folder'; item: FileItem | Folder } | null>(null);
   const [moveItem, setMoveItem] = useState<{ type: 'file' | 'folder'; item: FileItem | Folder } | null>(null);
+  const [copyItem, setCopyItem] = useState<FileItem | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'file' | 'folder'; item: FileItem | Folder } | null>(null);
   const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
   const [uploadVersionFile, setUploadVersionFile] = useState<FileItem | null>(null);
+  const [tagsFile, setTagsFile] = useState<FileItem | null>(null);
+  const [commentsFile, setCommentsFile] = useState<FileItem | null>(null);
+  const [detailsFile, setDetailsFile] = useState<FileItem | null>(null);
   const versionFileInputRef = useRef<HTMLInputElement>(null);
   
   // Multi-select state
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [showMoveSelected, setShowMoveSelected] = useState(false);
+
+  // Drag and drop state
+  const [draggedItem, setDraggedItem] = useState<{ type: 'file' | 'folder'; id: string } | null>(null);
+  const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
 
   const hasSelection = selectedFiles.size > 0 || selectedFolders.size > 0;
   const totalSelected = selectedFiles.size + selectedFolders.size;
@@ -205,6 +217,57 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
     setContextMenu({ x: e.clientX, y: e.clientY, type, item });
   };
 
+  // Drag handlers
+  const handleDragStart = (e: React.DragEvent, type: 'file' | 'folder', id: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedItem({ type, id });
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDropTargetFolderId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // Don't allow drop on self
+    if (draggedItem?.type === 'folder' && draggedItem.id === folderId) return;
+    setDropTargetFolderId(folderId);
+  };
+
+  const handleDragLeave = () => {
+    setDropTargetFolderId(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+    setDropTargetFolderId(null);
+    
+    if (!draggedItem) return;
+    
+    // Don't drop folder on itself
+    if (draggedItem.type === 'folder' && draggedItem.id === targetFolderId) {
+      toast.error("Cannot move folder into itself");
+      return;
+    }
+
+    try {
+      if (draggedItem.type === 'file') {
+        await filesApi.move(draggedItem.id, targetFolderId);
+        toast.success('File moved');
+      } else {
+        await foldersApi.move(draggedItem.id, targetFolderId);
+        toast.success('Folder moved');
+      }
+      onRefresh();
+    } catch (err) {
+      toast.error('Failed to move item');
+    }
+    
+    setDraggedItem(null);
+  };
+
   const handleDownload = async (file: FileItem) => {
     try {
       const url = await filesApi.getDownloadUrl(file.id);
@@ -228,6 +291,18 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
     } catch (err) {
       console.error('Download failed:', err);
       toast.error('Failed to download file');
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFiles.size === 0) return;
+    try {
+      toast.info('Preparing download...');
+      await filesApi.bulkDownload(Array.from(selectedFiles));
+      toast.success('Download started');
+    } catch (err) {
+      console.error('Bulk download failed:', err);
+      toast.error('Failed to download files');
     }
   };
 
@@ -292,6 +367,17 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
       onRefresh();
     } catch (err) {
       toast.error('Failed to move folder');
+    }
+  };
+
+  const handleCopyFile = async (targetFolderId: string | null) => {
+    if (!copyItem) return;
+    try {
+      await filesApi.copy(copyItem.id, targetFolderId);
+      toast.success(`"${copyItem.name}" copied`);
+      onRefresh();
+    } catch (err) {
+      toast.error('Failed to copy file');
     }
   };
 
@@ -449,6 +535,15 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
               {totalSelected} selected
             </span>
             <div className="flex-1" />
+            {!isTrashView && selectedFiles.size > 0 && (
+              <button
+                onClick={handleBulkDownload}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-100 rounded"
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </button>
+            )}
             {!isTrashView && (
               <button
                 onClick={() => setShowMoveSelected(true)}
@@ -489,9 +584,16 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
           {/* Folders */}
           {folders.map((folder) => {
             const isSelected = selectedFolders.has(folder.id);
+            const isDropTarget = dropTargetFolderId === folder.id;
             return (
               <div
                 key={folder.id}
+                draggable={!isTrashView}
+                onDragStart={(e) => handleDragStart(e, 'folder', folder.id)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, folder.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, folder.id)}
                 onClick={(e) => {
                   if (e.ctrlKey || e.metaKey) {
                     toggleFolderSelection(folder.id, e);
@@ -502,9 +604,10 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                   }
                 }}
                 onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
-                className={`file-card group flex flex-col items-center p-4 rounded-lg border cursor-pointer relative ${
+                className={`file-card group flex flex-col items-center p-4 rounded-lg border cursor-pointer relative transition-all ${
+                  isDropTarget ? 'border-blue-500 bg-blue-100 scale-105' :
                   isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-gray-200'
-                }`}
+                } ${draggedItem?.type === 'folder' && draggedItem.id === folder.id ? 'opacity-50' : ''}`}
               >
                 {/* Checkbox */}
                 <button
@@ -535,6 +638,9 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
             return (
               <div
                 key={file.id}
+                draggable={!isTrashView}
+                onDragStart={(e) => handleDragStart(e, 'file', file.id)}
+                onDragEnd={handleDragEnd}
                 onClick={(e) => {
                   if (e.ctrlKey || e.metaKey) {
                     toggleFileSelection(file.id, e);
@@ -545,9 +651,9 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                   }
                 }}
                 onContextMenu={(e) => handleContextMenu(e, 'file', file)}
-                className={`file-card group flex flex-col items-center p-4 rounded-lg border cursor-pointer relative ${
+                className={`file-card group flex flex-col items-center p-4 rounded-lg border cursor-pointer relative transition-all ${
                   isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-gray-200'
-                }`}
+                } ${draggedItem?.type === 'file' && draggedItem.id === file.id ? 'opacity-50' : ''}`}
               >
                 {/* Checkbox */}
                 <button
@@ -621,8 +727,11 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                   onStar: () => handleToggleStar(contextMenu.item as FileItem),
                   onRename: () => setRenameItem({ type: 'file', item: contextMenu.item as FileItem }),
                   onMove: () => setMoveItem({ type: 'file', item: contextMenu.item as FileItem }),
+                  onCopy: () => setCopyItem(contextMenu.item as FileItem),
+                  onTags: () => setTagsFile(contextMenu.item as FileItem),
+                  onComments: () => setCommentsFile(contextMenu.item as FileItem),
                   onDelete: () => handleDelete(contextMenu.item as FileItem),
-                  onDetails: () => console.log('Details:', contextMenu.item),
+                  onDetails: () => setDetailsFile(contextMenu.item as FileItem),
                   onVersionHistory: () => setVersionHistoryFile(contextMenu.item as FileItem),
                   onUploadNewVersion: () => triggerVersionUpload(contextMenu.item as FileItem),
                 })
@@ -705,8 +814,19 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
           <MoveModal
             itemName={moveItem.item.name}
             currentFolderId={moveItem.type === 'file' ? (moveItem.item as FileItem).folderId : (moveItem.item as Folder).parentId}
-            onMove={handleMoveFile}
+            onMove={moveItem.type === 'file' ? handleMoveFile : handleMoveFolder}
             onClose={() => setMoveItem(null)}
+          />
+        )}
+
+        {/* Copy Modal */}
+        {copyItem && (
+          <MoveModal
+            itemName={copyItem.name}
+            currentFolderId={copyItem.folderId}
+            onMove={handleCopyFile}
+            onClose={() => setCopyItem(null)}
+            title="Copy to"
           />
         )}
 
@@ -734,6 +854,33 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
             onCancel={() => setShowDeleteConfirm(false)}
           />
         )}
+
+        {/* Tags Modal */}
+        {tagsFile && (
+          <TagsModal
+            fileId={tagsFile.id}
+            fileName={tagsFile.name}
+            onClose={() => setTagsFile(null)}
+            onUpdate={onRefresh}
+          />
+        )}
+
+        {/* Comments Modal */}
+        {commentsFile && (
+          <CommentsModal
+            fileId={commentsFile.id}
+            fileName={commentsFile.name}
+            onClose={() => setCommentsFile(null)}
+          />
+        )}
+
+        {/* File Details Modal */}
+        {detailsFile && (
+          <FileDetailsModal
+            file={detailsFile}
+            onClose={() => setDetailsFile(null)}
+          />
+        )}
       </>
     );
   }
@@ -754,6 +901,15 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
             {totalSelected} selected
           </span>
           <div className="flex-1" />
+          {!isTrashView && selectedFiles.size > 0 && (
+            <button
+              onClick={handleBulkDownload}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-100 rounded"
+            >
+              <Download className="w-4 h-4" />
+              Download
+            </button>
+          )}
           {!isTrashView && (
             <button
               onClick={() => setShowMoveSelected(true)}
@@ -797,9 +953,16 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
         {/* Folders */}
         {folders.map((folder) => {
           const isSelected = selectedFolders.has(folder.id);
+          const isDropTarget = dropTargetFolderId === folder.id;
           return (
             <div
               key={folder.id}
+              draggable={!isTrashView}
+              onDragStart={(e) => handleDragStart(e, 'folder', folder.id)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => handleDragOver(e, folder.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, folder.id)}
               onClick={(e) => {
                 if (e.ctrlKey || e.metaKey) {
                   toggleFolderSelection(folder.id, e);
@@ -810,9 +973,10 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                 }
               }}
               onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
-              className={`grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 cursor-pointer items-center ${
+              className={`grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 cursor-pointer items-center transition-all ${
+                isDropTarget ? 'bg-blue-100 border-blue-500' :
                 isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
-              }`}
+              } ${draggedItem?.type === 'folder' && draggedItem.id === folder.id ? 'opacity-50' : ''}`}
             >
               <div className="col-span-6 flex items-center gap-3">
                 <button
@@ -845,6 +1009,9 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
           return (
             <div
               key={file.id}
+              draggable={!isTrashView}
+              onDragStart={(e) => handleDragStart(e, 'file', file.id)}
+              onDragEnd={handleDragEnd}
               onClick={(e) => {
                 if (e.ctrlKey || e.metaKey) {
                   toggleFileSelection(file.id, e);
@@ -857,7 +1024,7 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
               onContextMenu={(e) => handleContextMenu(e, 'file', file)}
               className={`grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 cursor-pointer items-center group ${
                 isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
-              }`}
+              } ${draggedItem?.type === 'file' && draggedItem.id === file.id ? 'opacity-50' : ''}`}
             >
               <div className="col-span-6 flex items-center gap-3">
                 <button
@@ -922,8 +1089,11 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
                 onStar: () => handleToggleStar(contextMenu.item as FileItem),
                 onRename: () => setRenameItem({ type: 'file', item: contextMenu.item as FileItem }),
                 onMove: () => setMoveItem({ type: 'file', item: contextMenu.item as FileItem }),
+                onCopy: () => setCopyItem(contextMenu.item as FileItem),
+                onTags: () => setTagsFile(contextMenu.item as FileItem),
+                onComments: () => setCommentsFile(contextMenu.item as FileItem),
                 onDelete: () => handleDelete(contextMenu.item as FileItem),
-                onDetails: () => console.log('Details:', contextMenu.item),
+                onDetails: () => setDetailsFile(contextMenu.item as FileItem),
               })
           }
           onClose={() => setContextMenu(null)}
@@ -997,6 +1167,17 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
         />
       )}
 
+      {/* Copy Modal */}
+      {copyItem && (
+        <MoveModal
+          itemName={copyItem.name}
+          currentFolderId={copyItem.folderId}
+          onMove={handleCopyFile}
+          onClose={() => setCopyItem(null)}
+          title="Copy to"
+        />
+      )}
+
       {/* Bulk Move Modal */}
       {showMoveSelected && (
         <MoveModal
@@ -1019,6 +1200,33 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
           variant="danger"
           onConfirm={executeBulkDelete}
           onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {/* Tags Modal */}
+      {tagsFile && (
+        <TagsModal
+          fileId={tagsFile.id}
+          fileName={tagsFile.name}
+          onClose={() => setTagsFile(null)}
+          onUpdate={onRefresh}
+        />
+      )}
+
+      {/* Comments Modal */}
+      {commentsFile && (
+        <CommentsModal
+          fileId={commentsFile.id}
+          fileName={commentsFile.name}
+          onClose={() => setCommentsFile(null)}
+        />
+      )}
+
+      {/* File Details Modal */}
+      {detailsFile && (
+        <FileDetailsModal
+          file={detailsFile}
+          onClose={() => setDetailsFile(null)}
         />
       )}
     </>

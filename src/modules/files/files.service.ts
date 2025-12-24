@@ -406,6 +406,82 @@ export class FilesService {
   }
 
   /**
+   * Get bulk download as ZIP stream for multiple files
+   */
+  async getBulkDownloadStream(fileIds: string[], userId: string): Promise<{
+    buffer: Buffer;
+    fileName: string;
+  }> {
+    if (!fileIds || fileIds.length === 0) {
+      throw new BadRequestException('No files specified');
+    }
+
+    if (fileIds.length > 100) {
+      throw new BadRequestException('Maximum 100 files allowed for bulk download');
+    }
+
+    this.logger.log(`Bulk download: Starting for ${fileIds.length} files, userId: ${userId}`);
+    
+    const zip = new AdmZip();
+    const fileNames = new Map<string, number>(); // Track duplicate names
+
+    for (const fileId of fileIds) {
+      const file = await this.fileRepository.findOne({
+        where: { id: fileId, isTrashed: false },
+      });
+
+      if (!file) {
+        this.logger.warn(`Bulk download: File ${fileId} not found, skipping`);
+        continue;
+      }
+
+      // Check owner or permission
+      if (file.ownerId !== userId) {
+        const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+        if (!hasAccess) {
+          this.logger.warn(`Bulk download: No access to file ${fileId}, skipping`);
+          continue;
+        }
+      }
+
+      if (file.status !== FileStatus.READY && file.status !== FileStatus.PROCESSING) {
+        this.logger.warn(`Bulk download: File ${fileId} not ready, skipping`);
+        continue;
+      }
+
+      try {
+        const fileBuffer = await this.minioService.getObjectBuffer('files', file.storageKey);
+        
+        // Handle duplicate file names
+        let fileName = file.name;
+        const count = fileNames.get(fileName) || 0;
+        if (count > 0) {
+          const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '';
+          const baseName = fileName.includes('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+          fileName = `${baseName} (${count})${ext}`;
+        }
+        fileNames.set(file.name, count + 1);
+
+        zip.addFile(fileName, fileBuffer);
+      } catch (err) {
+        this.logger.error(`Bulk download: Failed to get file ${fileId}`, err);
+      }
+    }
+
+    if (zip.getEntries().length === 0) {
+      throw new BadRequestException('No files available for download');
+    }
+
+    const buffer = zip.toBuffer();
+    const timestamp = new Date().toISOString().split('T')[0];
+
+    return {
+      buffer,
+      fileName: `download_${timestamp}.zip`,
+    };
+  }
+
+  /**
    * Get thumbnail stream for file preview
    */
   async getThumbnailStream(fileId: string, userId: string): Promise<{
@@ -734,6 +810,84 @@ export class FilesService {
     });
 
     return saved;
+  }
+
+  /**
+   * Copy file to another folder (creates a duplicate)
+   */
+  async copy(fileId: string, userId: string, targetFolderId: string | null): Promise<File> {
+    const originalFile = await this.fileRepository.findOne({
+      where: { id: fileId, isTrashed: false },
+    });
+
+    if (!originalFile) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Check read access to original file
+    if (originalFile.ownerId !== userId) {
+      const hasAccess = await this.permissionsService.checkAccess(userId, fileId, 'file', PermissionRole.VIEWER);
+      if (!hasAccess) throw new ForbiddenException('You do not have permission to copy this file');
+    }
+
+    // Check write access to target folder if specified
+    if (targetFolderId) {
+      const targetFolder = await this.fileRepository.manager.getRepository('folders').findOne({
+        where: { id: targetFolderId, isTrashed: false }
+      });
+      if (targetFolder && targetFolder.ownerId !== userId) {
+        const hasTargetAccess = await this.permissionsService.checkAccess(userId, targetFolderId, 'folder', PermissionRole.EDITOR);
+        if (!hasTargetAccess) throw new ForbiddenException('You do not have permission to copy files into the target folder');
+      }
+    }
+
+    // Check storage quota
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.storageUsedBytes + originalFile.sizeBytes > user.storageQuotaBytes) {
+      throw new BadRequestException('Storage quota exceeded. Cannot copy file.');
+    }
+
+    // Generate new file ID and storage key
+    const newFileId = uuidv4();
+    const newStorageKey = `${newFileId}/v1_${originalFile.name}`;
+
+    // Copy file in MinIO
+    await this.minioService.copyObject('files', originalFile.storageKey, 'files', newStorageKey);
+
+    // Create new file record (owned by the user who copies)
+    const newFile = this.fileRepository.create({
+      id: newFileId,
+      name: `Copy of ${originalFile.name}`,
+      mimeType: originalFile.mimeType,
+      sizeBytes: originalFile.sizeBytes,
+      storageKey: newStorageKey,
+      ownerId: userId,
+      folderId: targetFolderId ?? undefined,
+      status: originalFile.status,
+      scanStatus: originalFile.scanStatus,
+    });
+
+    await this.fileRepository.save(newFile);
+
+    // Update user storage
+    user.storageUsedBytes += originalFile.sizeBytes;
+    await this.userRepository.save(user);
+
+    // Create initial version record
+    const version = this.fileVersionRepository.create({
+      fileId: newFileId,
+      versionNumber: 1,
+      storageKey: newStorageKey,
+      sizeBytes: originalFile.sizeBytes,
+      uploadedById: userId,
+    });
+    await this.fileVersionRepository.save(version);
+
+    this.logger.log(`Copied file ${fileId} to ${newFileId}`);
+
+    return newFile;
   }
 
   /**

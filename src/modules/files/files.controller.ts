@@ -17,6 +17,7 @@ import {
   StreamableFile,
   UnauthorizedException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -27,13 +28,17 @@ import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Public } from '@common/decorators/public.decorator';
 import { User } from '@modules/users/entities/user.entity';
+import { TagsService } from '@modules/tags/tags.service';
 
 @ApiTags('Files')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('files')
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly tagsService: TagsService,
+  ) {}
 
   /**
    * POST /files/upload
@@ -127,6 +132,46 @@ export class FilesController {
     @Query('folderId') folderId?: string,
   ) {
     return this.filesService.listFiles(user.id, folderId);
+  }
+
+  /**
+   * GET /files/bulk-download
+   * Download multiple files as ZIP
+   */
+  @Get('bulk-download')
+  @ApiOperation({ summary: 'Download multiple files as ZIP' })
+  @ApiProduces('application/zip')
+  @ApiQuery({ name: 'ids', required: true, description: 'Comma-separated file IDs' })
+  async bulkDownload(
+    @Query('ids') ids: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ): Promise<void> {
+    console.log('Bulk download called, ids:', ids, 'user:', user?.id);
+    
+    if (!ids) {
+      res.status(400).json({ message: 'No file IDs specified' });
+      return;
+    }
+
+    try {
+      const fileIds = ids.split(',').map(id => id.trim()).filter(id => id);
+      console.log('Processing fileIds:', fileIds);
+      
+      const { buffer, fileName } = await this.filesService.getBulkDownloadStream(fileIds, user.id);
+      console.log('Got buffer, size:', buffer.length);
+      
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Length': buffer.length.toString(),
+      });
+      
+      res.send(buffer);
+    } catch (error) {
+      console.error('Bulk download error:', error);
+      res.status(500).json({ message: 'Failed to create download' });
+    }
   }
 
   /**
@@ -265,6 +310,20 @@ export class FilesController {
     @CurrentUser() user: User,
   ) {
     return this.filesService.move(id, user.id, folderId);
+  }
+
+  /**
+   * POST /files/:id/copy
+   * Copy file to another folder (creates a duplicate)
+   */
+  @Post(':id/copy')
+  @ApiOperation({ summary: 'Copy file to another folder' })
+  async copyFile(
+    @Param('id') id: string,
+    @Body('folderId') folderId: string | null,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.copy(id, user.id, folderId);
   }
 
   /**
@@ -511,5 +570,64 @@ export class FilesController {
     @CurrentUser() user: User,
   ) {
     return this.filesService.restoreVersion(versionId, user.id);
+  }
+
+  // ============================================
+  // FILE TAGS ENDPOINTS
+  // ============================================
+
+  /**
+   * GET /files/:id/tags
+   * Get all tags for a file
+   */
+  @Get(':id/tags')
+  @ApiOperation({ summary: 'Get tags for a file' })
+  async getFileTags(
+    @Param('id') fileId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.tagsService.getFileTags(fileId, user.id);
+  }
+
+  /**
+   * POST /files/:id/tags
+   * Add tags to a file
+   */
+  @Post(':id/tags')
+  @ApiOperation({ summary: 'Add tags to a file' })
+  async addTagsToFile(
+    @Param('id') fileId: string,
+    @Body('tagIds') tagIds: string[],
+    @CurrentUser() user: User,
+  ) {
+    return this.tagsService.addTagsToFile(fileId, tagIds, user.id);
+  }
+
+  /**
+   * PATCH /files/:id/tags
+   * Set tags for a file (replace all)
+   */
+  @Patch(':id/tags')
+  @ApiOperation({ summary: 'Set tags for a file (replace all)' })
+  async setFileTags(
+    @Param('id') fileId: string,
+    @Body('tagIds') tagIds: string[],
+    @CurrentUser() user: User,
+  ) {
+    return this.tagsService.setFileTags(fileId, tagIds, user.id);
+  }
+
+  /**
+   * DELETE /files/:id/tags
+   * Remove tags from a file
+   */
+  @Delete(':id/tags')
+  @ApiOperation({ summary: 'Remove tags from a file' })
+  async removeTagsFromFile(
+    @Param('id') fileId: string,
+    @Body('tagIds') tagIds: string[],
+    @CurrentUser() user: User,
+  ) {
+    return this.tagsService.removeTagsFromFile(fileId, tagIds, user.id);
   }
 }
