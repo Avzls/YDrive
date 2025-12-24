@@ -445,5 +445,49 @@ export const permissionsApi = {
   },
 };
 
+// Audit / Activity Log
+export interface AuditLogEntry {
+  id: string;
+  userId?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  resourceName?: string;
+  details?: Record<string, any>;
+  createdAt: string;
+}
+
+export const auditApi = {
+  getMyActivity: async (limit?: number) => {
+    const { data } = await api.get<AuditLogEntry[]>('/audit/my-activity', { params: { limit } });
+    return data;
+  },
+  getRecentActivity: async (limit?: number) => {
+    const { data } = await api.get<AuditLogEntry[]>('/audit/recent', { params: { limit } });
+    return data;
+  },
+  getAllActivity: async (filters?: {
+    limit?: number;
+    userId?: string;
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const { data } = await api.get<AuditLogEntry[]>('/audit/all', { params: filters });
+    return data;
+  },
+  getResourceActivity: async (resourceType: string, resourceId: string, limit?: number) => {
+    const { data } = await api.get<AuditLogEntry[]>('/audit/resource', { 
+      params: { type: resourceType, id: resourceId, limit } 
+    });
+    return data;
+  },
+};
+
 export default api;
 

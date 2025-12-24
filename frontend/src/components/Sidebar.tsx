@@ -14,11 +14,12 @@ import {
   Menu,
   Clock,
   Shield,
+  Activity,
 } from 'lucide-react';
 
 interface SidebarProps {
-  currentView: 'drive' | 'shared' | 'recent' | 'starred' | 'trash';
-  onViewChange: (view: 'drive' | 'shared' | 'recent' | 'starred' | 'trash') => void;
+  currentView: 'drive' | 'shared' | 'recent' | 'starred' | 'trash' | 'activity';
+  onViewChange: (view: 'drive' | 'shared' | 'recent' | 'starred' | 'trash' | 'activity') => void;
   onNewFolder: () => void;
   onUpload: () => void;
 
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { id: 'shared', label: 'Shared with me', icon: Users },
   { id: 'recent', label: 'Recent', icon: Clock },
   { id: 'starred', label: 'Starred', icon: Star },
+  { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'trash', label: 'Trash', icon: Trash2 },
 ] as const;
 

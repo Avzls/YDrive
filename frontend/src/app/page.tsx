@@ -35,7 +35,7 @@ export default function HomePage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([{ id: null, name: 'My Drive' }]);
-  const [currentView, setCurrentView] = useState<'drive' | 'shared' | 'recent' | 'starred' | 'trash'>('drive');
+  const [currentView, setCurrentView] = useState<'drive' | 'shared' | 'recent' | 'starred' | 'trash' | 'activity'>('drive');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
@@ -368,7 +368,13 @@ export default function HomePage() {
         {/* Sidebar */}
         <Sidebar
           currentView={currentView}
-          onViewChange={setCurrentView}
+          onViewChange={(view) => {
+            if (view === 'activity') {
+              router.push('/activity');
+            } else {
+              setCurrentView(view);
+            }
+          }}
           onNewFolder={() => setShowNewFolder(true)}
           onUpload={handleUpload}
           storageUsed={user?.storageUsedBytes || 0}

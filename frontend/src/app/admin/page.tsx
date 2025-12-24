@@ -279,6 +279,20 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Quick Actions */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+          <div className="flex gap-4">
+            <button
+              onClick={() => router.push('/admin/activity')}
+              className="flex items-center gap-3 px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors"
+            >
+              <Shield className="w-5 h-5" />
+              <span className="font-medium">View Activity Log</span>
+            </button>
+          </div>
+        </div>
+
         {/* Users Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">

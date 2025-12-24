@@ -12,6 +12,8 @@ import { User } from '@modules/users/entities/user.entity';
 import { ConfigService } from '@nestjs/config';
 import { PermissionsService } from '@modules/permissions/permissions.service';
 import { PermissionRole } from '@modules/permissions/entities/permission.entity';
+import { AuditService } from '@modules/audit/audit.service';
+import { AuditAction } from '@modules/audit/entities/audit-log.entity';
 import * as AdmZip from 'adm-zip';
 import { createExtractorFromData } from 'node-unrar-js';
 
@@ -30,6 +32,7 @@ export class FilesService {
     private minioService: MinioService,
     private configService: ConfigService,
     private permissionsService: PermissionsService,
+    private auditService: AuditService,
     @InjectQueue('file-processing')
     private fileProcessingQueue: Queue,
   ) {
@@ -206,6 +209,16 @@ export class FilesService {
 
     this.logger.log(`Direct upload: ${fileRecord.id} - ${fileRecord.name}`);
 
+    // Audit log
+    this.auditService.log({
+      userId,
+      action: AuditAction.FILE_UPLOAD,
+      resourceType: 'file',
+      resourceId: fileRecord.id,
+      resourceName: fileRecord.name,
+      details: { sizeBytes: fileRecord.sizeBytes, mimeType: fileRecord.mimeType },
+    });
+
     return {
       id: fileRecord.id,
       name: fileRecord.name,
@@ -292,6 +305,16 @@ export class FilesService {
     });
 
     this.logger.log(`Uploaded new version ${newVersionNumber} for file: ${fileId}`);
+
+    // Audit log
+    this.auditService.log({
+      userId,
+      action: AuditAction.FILE_VERSION_CREATE,
+      resourceType: 'file',
+      resourceId: existingFile.id,
+      resourceName: existingFile.name,
+      details: { versionNumber: newVersionNumber, sizeBytes: file.size },
+    });
 
     return {
       id: existingFile.id,
@@ -651,8 +674,21 @@ export class FilesService {
       if (!hasAccess) throw new ForbiddenException('You do not have permission to rename this file');
     }
 
+    const oldName = file.name;
     file.name = newName;
-    return this.fileRepository.save(file);
+    const saved = await this.fileRepository.save(file);
+
+    // Audit log
+    this.auditService.log({
+      userId,
+      action: AuditAction.FILE_RENAME,
+      resourceType: 'file',
+      resourceId: fileId,
+      resourceName: newName,
+      details: { oldName, newName },
+    });
+
+    return saved;
   }
 
   /**
@@ -683,8 +719,21 @@ export class FilesService {
       }
     }
 
+    const oldFolderId = file.folderId;
     file.folderId = targetFolderId ?? undefined;
-    return this.fileRepository.save(file);
+    const saved = await this.fileRepository.save(file);
+
+    // Audit log
+    this.auditService.log({
+      userId,
+      action: AuditAction.FILE_MOVE,
+      resourceType: 'file',
+      resourceId: fileId,
+      resourceName: file.name,
+      details: { fromFolderId: oldFolderId || 'root', toFolderId: targetFolderId || 'root' },
+    });
+
+    return saved;
   }
 
   /**
@@ -707,6 +756,15 @@ export class FilesService {
     file.isTrashed = true;
     file.trashedAt = new Date();
     await this.fileRepository.save(file);
+
+    // Audit log
+    this.auditService.log({
+      userId,
+      action: AuditAction.FILE_DELETE,
+      resourceType: 'file',
+      resourceId: fileId,
+      resourceName: file.name,
+    });
   }
 
   /**
@@ -724,6 +782,15 @@ export class FilesService {
     file.isTrashed = false;
     file.trashedAt = undefined;
     await this.fileRepository.save(file);
+
+    // Audit log
+    this.auditService.log({
+      userId,
+      action: AuditAction.FILE_RESTORE,
+      resourceType: 'file',
+      resourceId: fileId,
+      resourceName: file.name,
+    });
   }
 
   /**
