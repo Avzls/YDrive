@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { adminApi, authApi, SystemStats, AdminUser, CreateUserDto, UpdateUserDto } from '@/lib/api';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { toast } from 'sonner';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -58,6 +60,7 @@ export default function AdminPage() {
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [deleteUserConfirm, setDeleteUserConfirm] = useState<AdminUser | null>(null);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [formData, setFormData] = useState<CreateUserDto>({
     nip: '',
@@ -170,13 +173,20 @@ export default function AdminPage() {
     }
   };
 
-  const handleDelete = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+  const handleDeleteClick = (u: AdminUser) => {
+    setDeleteUserConfirm(u);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteUserConfirm) return;
     try {
-      await adminApi.deleteUser(userId);
+      await adminApi.deleteUser(deleteUserConfirm.id);
+      toast.success(`User "${deleteUserConfirm.name}" deleted`);
       loadData();
     } catch (err) {
-      console.error('Failed to delete user:', err);
+      toast.error('Failed to delete user');
+    } finally {
+      setDeleteUserConfirm(null);
     }
   };
 
@@ -369,7 +379,7 @@ export default function AdminPage() {
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDelete(u.id)}
+                            onClick={() => handleDeleteClick(u)}
                             className="p-2 hover:bg-red-50 rounded-lg text-red-600"
                             title="Delete"
                           >
@@ -589,6 +599,19 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {deleteUserConfirm && (
+        <ConfirmModal
+          title="Delete User"
+          message={`Are you sure you want to delete user "${deleteUserConfirm.name}"? This action cannot be undone.`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteUserConfirm(null)}
+        />
       )}
     </div>
   );

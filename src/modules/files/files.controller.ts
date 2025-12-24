@@ -66,6 +66,30 @@ export class FilesController {
   }
 
   /**
+   * POST /files/:id/version
+   * Upload a new version of an existing file
+   */
+  @Post(':id/version')
+  @ApiOperation({ summary: 'Upload a new version of an existing file' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadNewVersion(
+    @Param('id') fileId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.uploadNewVersion(fileId, file, user.id);
+  }
+
+  /**
    * POST /files/init-upload
    * Initialize file upload - get presigned URL
    */
@@ -424,5 +448,68 @@ export class FilesController {
   @ApiOperation({ summary: 'Empty trash' })
   async emptyTrash(@CurrentUser() user: User) {
     return this.filesService.emptyTrash(user.id);
+  }
+
+  /**
+   * GET /files/:id/versions
+   * List all versions of a file
+   */
+  @Get(':id/versions')
+  @ApiOperation({ summary: 'List all versions of a file' })
+  async listVersions(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.listVersions(id, user.id);
+  }
+
+  /**
+   * GET /files/versions/:versionId/stream
+   * Stream a specific version for download
+   */
+  @Public()
+  @Get('versions/:versionId/stream')
+  @ApiOperation({ summary: 'Download a specific version' })
+  @ApiProduces('application/octet-stream')
+  @ApiQuery({ name: 'token', required: true })
+  async streamVersion(
+    @Param('versionId') versionId: string,
+    @Query('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    if (!token) throw new UnauthorizedException('Token required');
+
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const userId = payload.sub;
+      if (!userId) throw new UnauthorizedException('Invalid token');
+
+      const { stream, fileName, mimeType, size } = await this.filesService.getVersionStream(versionId, userId);
+      
+      const asciiFileName = fileName.replace(/[^\x20-\x7E]/g, '_');
+      res.set({
+        'Content-Type': mimeType,
+        'Content-Disposition': `attachment; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        'Content-Length': size.toString(),
+      });
+
+      return new StreamableFile(stream as any);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  /**
+   * POST /files/versions/:versionId/restore
+   * Restore a file to a specific version
+   */
+  @Post('versions/:versionId/restore')
+  @ApiOperation({ summary: 'Restore file to a specific version' })
+  async restoreVersion(
+    @Param('versionId') versionId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.filesService.restoreVersion(versionId, user.id);
   }
 }

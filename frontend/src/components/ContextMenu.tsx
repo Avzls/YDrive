@@ -13,7 +13,9 @@ import {
   Copy,
   Info,
   RotateCcw,
-  XCircle
+  XCircle,
+  History,
+  Upload
 } from 'lucide-react';
 
 interface ContextMenuItem {
@@ -104,7 +106,6 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   );
 }
 
-// Helper function to create file context menu items
 export function getFileContextMenuItems(
   file: { id: string; name: string; status: string; isStarred?: boolean },
   callbacks: {
@@ -116,20 +117,35 @@ export function getFileContextMenuItems(
     onMove: () => void;
     onDelete: () => void;
     onDetails: () => void;
+    onVersionHistory?: () => void;
+    onUploadNewVersion?: () => void;
   }
 ): ContextMenuItem[] {
   const isReady = file.status === 'ready';
 
-  return [
+  const items: ContextMenuItem[] = [
     { id: 'preview', label: 'Preview', icon: Eye, onClick: callbacks.onPreview, disabled: !isReady },
     { id: 'download', label: 'Download', icon: Download, onClick: callbacks.onDownload, disabled: !isReady },
     { id: 'share', label: 'Share', icon: Share2, onClick: callbacks.onShare, divider: true },
     { id: 'star', label: file.isStarred ? 'Remove from Starred' : 'Add to Starred', icon: Star, onClick: callbacks.onStar },
     { id: 'rename', label: 'Rename', icon: Pencil, onClick: callbacks.onRename },
     { id: 'move', label: 'Move to', icon: FolderInput, onClick: callbacks.onMove },
+  ];
+
+  if (callbacks.onVersionHistory) {
+    items.push({ id: 'versions', label: 'Version history', icon: History, onClick: callbacks.onVersionHistory });
+  }
+
+  if (callbacks.onUploadNewVersion) {
+    items.push({ id: 'upload-version', label: 'Upload new version', icon: Upload, onClick: callbacks.onUploadNewVersion });
+  }
+
+  items.push(
     { id: 'details', label: 'File details', icon: Info, onClick: callbacks.onDetails, divider: true },
     { id: 'delete', label: 'Move to trash', icon: Trash2, onClick: callbacks.onDelete, danger: true, divider: true },
-  ];
+  );
+
+  return items;
 }
 
 // Helper function to create folder context menu items
