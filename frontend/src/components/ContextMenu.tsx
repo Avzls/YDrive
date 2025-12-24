@@ -15,7 +15,9 @@ import {
   RotateCcw,
   XCircle,
   History,
-  Upload
+  Upload,
+  Tag,
+  MessageSquare
 } from 'lucide-react';
 
 interface ContextMenuItem {
@@ -115,6 +117,9 @@ export function getFileContextMenuItems(
     onStar: () => void;
     onRename: () => void;
     onMove: () => void;
+    onCopy?: () => void;
+    onTags?: () => void;
+    onComments?: () => void;
     onDelete: () => void;
     onDetails: () => void;
     onVersionHistory?: () => void;
@@ -132,12 +137,24 @@ export function getFileContextMenuItems(
     { id: 'move', label: 'Move to', icon: FolderInput, onClick: callbacks.onMove },
   ];
 
+  if (callbacks.onCopy) {
+    items.push({ id: 'copy', label: 'Copy to', icon: Copy, onClick: callbacks.onCopy });
+  }
+
   if (callbacks.onVersionHistory) {
     items.push({ id: 'versions', label: 'Version history', icon: History, onClick: callbacks.onVersionHistory });
   }
 
   if (callbacks.onUploadNewVersion) {
     items.push({ id: 'upload-version', label: 'Upload new version', icon: Upload, onClick: callbacks.onUploadNewVersion });
+  }
+
+  if (callbacks.onTags) {
+    items.push({ id: 'tags', label: 'Manage tags', icon: Tag, onClick: callbacks.onTags });
+  }
+
+  if (callbacks.onComments) {
+    items.push({ id: 'comments', label: 'Comments', icon: MessageSquare, onClick: callbacks.onComments });
   }
 
   items.push(

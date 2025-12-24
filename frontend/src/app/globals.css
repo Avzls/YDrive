@@ -99,3 +99,22 @@ body {
 .animate-slide-in {
   animation: slideIn 0.15s ease-out;
 }
+
+/* Drag and Drop styles */
+[draggable="true"] {
+  cursor: grab;
+}
+
+[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.drag-target {
+  background-color: #e8f0fe !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px var(--primary), 0 4px 12px rgba(26, 115, 232, 0.25) !important;
+}
+
+.dragging {
+  opacity: 0.5;
+}

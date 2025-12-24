@@ -147,6 +147,20 @@ export class MinioService implements OnModuleInit {
   }
 
   /**
+   * Get object as Buffer (for ZIP creation, etc.)
+   */
+  async getObjectBuffer(bucket: 'files' | 'thumbnails' | 'previews' | 'temp', objectKey: string): Promise<Buffer> {
+    const stream = await this.client.getObject(this.buckets[bucket], objectKey);
+    const chunks: Buffer[] = [];
+    
+    return new Promise((resolve, reject) => {
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('error', reject);
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+  }
+
+  /**
    * Get object stats (size, etag, etc.)
    */
   async getObjectStat(bucket: 'files' | 'thumbnails' | 'previews' | 'temp', objectKey: string) {

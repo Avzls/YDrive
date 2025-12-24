@@ -12,6 +12,8 @@ import { PermissionsModule } from '@modules/permissions/permissions.module';
 import { SharingModule } from '@modules/sharing/sharing.module';
 import { AuditModule } from '@modules/audit/audit.module';
 import { AdminModule } from '@modules/admin/admin.module';
+import { TagsModule } from '@modules/tags/tags.module';
+import { CommentsModule } from '@modules/comments/comments.module';
 import { JobsModule } from './jobs/jobs.module';
 
 // Entities
@@ -22,6 +24,8 @@ import { Folder } from '@modules/folders/entities/folder.entity';
 import { Permission } from '@modules/permissions/entities/permission.entity';
 import { ShareLink } from '@modules/sharing/entities/share-link.entity';
 import { AuditLog } from '@modules/audit/entities/audit-log.entity';
+import { Tag } from '@modules/tags/entities/tag.entity';
+import { Comment } from '@modules/comments/entities/comment.entity';
 
 @Module({
   imports: [
@@ -41,7 +45,7 @@ import { AuditLog } from '@modules/audit/entities/audit-log.entity';
         username: configService.get('DATABASE_USER', 'postgres'),
         password: configService.get('DATABASE_PASSWORD', 'postgres'),
         database: configService.get('DATABASE_NAME', 'filestorage'),
-        entities: [User, File, FileVersion, Folder, Permission, ShareLink, AuditLog],
+        entities: [User, File, FileVersion, Folder, Permission, ShareLink, AuditLog, Tag, Comment],
         synchronize: false,
         logging: configService.get('NODE_ENV') === 'development',
       }),
@@ -69,6 +73,8 @@ import { AuditLog } from '@modules/audit/entities/audit-log.entity';
     SharingModule,
     AuditModule,
     AdminModule,
+    TagsModule,
+    CommentsModule,
     JobsModule,
   ],
 })

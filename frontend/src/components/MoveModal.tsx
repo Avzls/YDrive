@@ -9,9 +9,10 @@ interface MoveModalProps {
   currentFolderId?: string;
   onMove: (targetFolderId: string | null) => void;
   onClose: () => void;
+  title?: string;
 }
 
-export function MoveModal({ itemName, currentFolderId, onMove, onClose }: MoveModalProps) {
+export function MoveModal({ itemName, currentFolderId, onMove, onClose, title = 'Move' }: MoveModalProps) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [currentPath, setCurrentPath] = useState<Folder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -71,7 +72,7 @@ export function MoveModal({ itemName, currentFolderId, onMove, onClose }: MoveMo
       >
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-900">
-            Move "{itemName}"
+            {title} "{itemName}"
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
@@ -149,7 +150,7 @@ export function MoveModal({ itemName, currentFolderId, onMove, onClose }: MoveMo
               disabled={getCurrentFolderId() === currentFolderId}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Move here
+              {title} here
             </button>
           </div>
         </div>
