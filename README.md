@@ -2,8 +2,6 @@
 
 <div align="center">
 
-![YDrive Logo](frontend/public/logo.png)
-
 **On-Premises Google Drive Clone untuk Internal Use**
 
 [![NestJS](https://img.shields.io/badge/NestJS-10.x-red?style=flat-square&logo=nestjs)](https://nestjs.com/)
