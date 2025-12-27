@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Download, ExternalLink, FileText, Package, Folder, File } from 'lucide-react';
+import { X, Download, ExternalLink, FileText, Package, Folder, File, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { FileItem, filesApi } from '@/lib/api';
 import { format } from 'date-fns';
+import { CommentsPanel } from './CommentsPanel';
 
 interface FilePreviewProps {
   file: FileItem;
@@ -57,6 +58,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
   const [archiveContents, setArchiveContents] = useState<any[] | null>(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [showComments, setShowComments] = useState(true);
 
   const isImage = file.mimeType.startsWith('image/');
   const isVideo = file.mimeType.startsWith('video/');
@@ -410,46 +412,60 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50"
       onClick={onClose}
     >
-      {/* Header */}
-      <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-        <h3 className="text-white font-medium truncate max-w-[50%]">{file.name}</h3>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDownload();
-            }}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-            title="Download"
-          >
-            <Download className="w-5 h-5" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(previewUrl, '_blank');
-            }}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-            title="Open in new tab"
-          >
-            <ExternalLink className="w-5 h-5" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-            title="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+      {/* Main container with flex layout */}
+      <div className="flex h-full" onClick={(e) => e.stopPropagation()}>
+        {/* Left side: Preview area */}
+        <div className={`flex-1 flex flex-col transition-all duration-300 ${showComments ? 'pr-0' : ''}`}>
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 flex-shrink-0">
+            <h3 className="text-white font-medium truncate max-w-[50%]">{file.name}</h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownload}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                title="Download"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => window.open(previewUrl, '_blank')}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                title="Open in new tab"
+              >
+                <ExternalLink className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setShowComments(!showComments)}
+                className={`p-2 rounded-lg transition-colors ${showComments ? 'bg-blue-500/30 text-blue-400' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                title={showComments ? 'Hide comments' : 'Show comments'}
+              >
+                {showComments ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
 
-      {/* Preview content */}
-      <div onClick={(e) => e.stopPropagation()}>
-        {renderPreview()}
+          {/* Preview content */}
+          <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+            {renderPreview()}
+          </div>
+        </div>
+
+        {/* Right side: Comments panel */}
+        {showComments && (
+          <div className="w-[380px] flex-shrink-0 h-full">
+            <CommentsPanel fileId={file.id} fileName={file.name} />
+          </div>
+        )}
       </div>
     </div>
   );

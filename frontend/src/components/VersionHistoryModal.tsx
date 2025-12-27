@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Download, RotateCcw, Loader2, History, FileText } from 'lucide-react';
+import { X, Download, RotateCcw, Loader2, History, FileText, Image, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { filesApi, FileItem } from '@/lib/api';
 import { toast } from 'sonner';
@@ -40,6 +40,16 @@ export function VersionHistoryModal({ file, onClose, onRestore }: VersionHistory
   const [error, setError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState<FileVersion | null>(null);
+  const [previewVersion, setPreviewVersion] = useState<FileVersion | null>(null);
+  
+  // Check if file type supports preview
+  const isPreviewable = file.mimeType.startsWith('image/') || 
+    file.mimeType.startsWith('video/') || 
+    file.mimeType === 'application/pdf';
+  
+  const getVersionPreviewUrl = (versionId: string) => {
+    return filesApi.getVersionDownloadUrl(versionId);
+  };
 
   useEffect(() => {
     loadVersions();
@@ -142,8 +152,41 @@ export function VersionHistoryModal({ file, onClose, onRestore }: VersionHistory
                         : 'border-gray-200 hover:border-gray-300 bg-white'
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                    <div className="flex items-start gap-4">
+                      {/* Thumbnail */}
+                      {isPreviewable && (
+                        <div 
+                          className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 cursor-pointer hover:ring-2 hover:ring-purple-400 transition-all"
+                          onClick={() => setPreviewVersion(version)}
+                          title="Click to preview"
+                        >
+                          {file.mimeType.startsWith('image/') ? (
+                            <img
+                              src={getVersionPreviewUrl(version.id)}
+                              alt={`Version ${version.versionNumber}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                          ) : file.mimeType.startsWith('video/') ? (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                              <Eye className="w-6 h-6 text-gray-500" />
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-red-50">
+                              <FileText className="w-6 h-6 text-red-500" />
+                            </div>
+                          )}
+                          <div className="hidden w-full h-full flex items-center justify-center">
+                            <Image className="w-6 h-6 text-gray-400" />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Version info */}
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className={`font-medium ${index === 0 ? 'text-purple-700' : 'text-gray-900'}`}>
                             Version {version.versionNumber}
@@ -168,7 +211,18 @@ export function VersionHistoryModal({ file, onClose, onRestore }: VersionHistory
                           <p className="text-sm text-gray-600 mt-2 italic">"{version.comment}"</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 ml-4">
+                      
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isPreviewable && (
+                          <button
+                            onClick={() => setPreviewVersion(version)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Preview this version"
+                          >
+                            <Eye className="w-4 h-4 text-gray-600" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDownload(version)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -219,6 +273,47 @@ export function VersionHistoryModal({ file, onClose, onRestore }: VersionHistory
           onConfirm={handleRestoreConfirm}
           onCancel={() => setRestoreConfirm(null)}
         />
+      )}
+      
+      {/* Version Preview Modal */}
+      {previewVersion && (
+        <div 
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setPreviewVersion(null)}
+        >
+          <button
+            onClick={() => setPreviewVersion(null)}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div className="absolute top-4 left-4 text-white">
+            <p className="font-medium">{file.name}</p>
+            <p className="text-sm text-gray-400">Version {previewVersion.versionNumber}</p>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            {file.mimeType.startsWith('image/') ? (
+              <img
+                src={getVersionPreviewUrl(previewVersion.id)}
+                alt={`Version ${previewVersion.versionNumber}`}
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              />
+            ) : file.mimeType.startsWith('video/') ? (
+              <video
+                src={getVersionPreviewUrl(previewVersion.id)}
+                controls
+                autoPlay
+                className="max-w-full max-h-[85vh] rounded-lg shadow-2xl"
+              />
+            ) : file.mimeType === 'application/pdf' ? (
+              <iframe
+                src={getVersionPreviewUrl(previewVersion.id)}
+                className="w-[90vw] h-[85vh] max-w-5xl rounded-lg shadow-2xl bg-white"
+                title={`Version ${previewVersion.versionNumber}`}
+              />
+            ) : null}
+          </div>
+        </div>
       )}
     </>
   );

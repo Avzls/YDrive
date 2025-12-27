@@ -251,15 +251,146 @@ export default function HomePage() {
     setIsDragging(false);
     dragCounter.current = 0;
 
-    const droppedFiles = e.dataTransfer.files;
-    if (!droppedFiles?.length) return;
-
     // Don't allow drop in trash or special views
     if (currentView !== 'drive') return;
 
-    for (const file of Array.from(droppedFiles)) {
+    const dataTransfer = e.dataTransfer;
+    if (!dataTransfer?.items || dataTransfer.items.length === 0) return;
+
+    // Check if any dropped item is a folder
+    const entries: FileSystemEntry[] = [];
+    for (let i = 0; i < dataTransfer.items.length; i++) {
+      const item = dataTransfer.items[i];
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry) {
+          entries.push(entry);
+        }
+      }
+    }
+
+    // Helper to read directory recursively
+    const readDirectoryRecursive = async (
+      dirEntry: FileSystemDirectoryEntry,
+      path: string = ''
+    ): Promise<{ file: File; relativePath: string }[]> => {
+      const results: { file: File; relativePath: string }[] = [];
+      const dirReader = dirEntry.createReader();
+      
+      const readEntries = (): Promise<FileSystemEntry[]> => {
+        return new Promise((resolve, reject) => {
+          dirReader.readEntries(resolve, reject);
+        });
+      };
+      
+      let allEntries: FileSystemEntry[] = [];
+      let batch: FileSystemEntry[];
+      do {
+        batch = await readEntries();
+        allEntries = allEntries.concat(batch);
+      } while (batch.length > 0);
+      
+      for (const entry of allEntries) {
+        const entryPath = path ? `${path}/${entry.name}` : entry.name;
+        
+        if (entry.isFile) {
+          const fileEntry = entry as FileSystemFileEntry;
+          const file = await new Promise<File>((resolve, reject) => {
+            fileEntry.file(resolve, reject);
+          });
+          results.push({ file, relativePath: entryPath });
+        } else if (entry.isDirectory) {
+          const subdirResults = await readDirectoryRecursive(
+            entry as FileSystemDirectoryEntry,
+            entryPath
+          );
+          results.push(...subdirResults);
+        }
+      }
+      
+      return results;
+    };
+
+    // Collect all files (with relative paths for folder contents)
+    const filesToUpload: { file: File; relativePath?: string }[] = [];
+    
+    for (const entry of entries) {
+      if (entry.isFile) {
+        const fileEntry = entry as FileSystemFileEntry;
+        const file = await new Promise<File>((resolve, reject) => {
+          fileEntry.file(resolve, reject);
+        });
+        filesToUpload.push({ file });
+      } else if (entry.isDirectory) {
+        const dirResults = await readDirectoryRecursive(
+          entry as FileSystemDirectoryEntry,
+          entry.name
+        );
+        filesToUpload.push(...dirResults);
+      }
+    }
+
+    if (filesToUpload.length === 0) return;
+
+    // Create folder structure if needed
+    const folderMap = new Map<string, string>();
+    const hasRelativePaths = filesToUpload.some(f => f.relativePath);
+    
+    if (hasRelativePaths) {
+      const seenFolders = new Set<string>();
+      
+      // Collect unique folder paths
+      for (const { relativePath } of filesToUpload) {
+        if (!relativePath) continue;
+        const parts = relativePath.split('/');
+        parts.pop(); // Remove file name
+        
+        let currentPath = '';
+        for (const part of parts) {
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          seenFolders.add(currentPath);
+        }
+      }
+      
+      // Sort by depth and create folders
+      const sortedFolders = Array.from(seenFolders).sort(
+        (a, b) => a.split('/').length - b.split('/').length
+      );
+      
+      for (const folderPath of sortedFolders) {
+        const parts = folderPath.split('/');
+        const folderName = parts[parts.length - 1];
+        const parentPath = parts.slice(0, -1).join('/');
+        
+        let targetParentId = currentFolderId || undefined;
+        if (parentPath && folderMap.has(parentPath)) {
+          targetParentId = folderMap.get(parentPath);
+        }
+        
+        try {
+          const newFolder = await foldersApi.create(folderName, targetParentId);
+          folderMap.set(folderPath, newFolder.id);
+        } catch (err) {
+          console.error(`Failed to create folder ${folderPath}:`, err);
+        }
+      }
+    }
+
+    // Upload files
+    for (const { file, relativePath } of filesToUpload) {
+      let targetFolderId = currentFolderId || undefined;
+      
+      if (relativePath) {
+        const parts = relativePath.split('/');
+        parts.pop();
+        const folderPath = parts.join('/');
+        if (folderPath && folderMap.has(folderPath)) {
+          targetFolderId = folderMap.get(folderPath);
+        }
+      }
+      
       try {
-        await filesApi.directUpload(file, currentFolderId || undefined);
+        await filesApi.directUpload(file, targetFolderId);
       } catch (err) {
         console.error('Upload failed:', err);
       }
@@ -376,7 +507,8 @@ export default function HomePage() {
             }
           }}
           onNewFolder={() => setShowNewFolder(true)}
-          onUpload={handleUpload}
+          currentFolderId={currentFolderId}
+          onUploadComplete={loadContents}
           storageUsed={user?.storageUsedBytes || 0}
           storageQuota={user?.storageQuotaBytes || 0}
           collapsed={sidebarCollapsed}
@@ -398,8 +530,8 @@ export default function HomePage() {
             <div className="absolute inset-0 z-50 bg-blue-500/10 backdrop-blur-sm flex items-center justify-center border-4 border-dashed border-blue-500 rounded-lg m-2 pointer-events-none">
               <div className="text-center">
                 <Upload className="w-16 h-16 text-blue-500 mx-auto mb-4" />
-                <p className="text-xl font-semibold text-blue-700">Drop files to upload</p>
-                <p className="text-sm text-blue-600 mt-1">Files will be uploaded to current folder</p>
+                <p className="text-xl font-semibold text-blue-700">Drop files or folders to upload</p>
+                <p className="text-sm text-blue-600 mt-1">Folders will maintain their structure</p>
               </div>
             </div>
           )}
