@@ -235,6 +235,7 @@ export class FilesService {
     fileId: string,
     file: Express.Multer.File,
     userId: string,
+    comment?: string,
   ): Promise<CompleteUploadResponseDto> {
     // Find existing file
     const existingFile = await this.fileRepository.findOne({ where: { id: fileId } });
@@ -265,14 +266,15 @@ export class FilesService {
       file.mimetype,
     );
 
-    // Create new version record
+    // Create new version record with custom comment or default
+    const versionComment = comment?.trim() || `Version ${newVersionNumber} uploaded`;
     const version = this.fileVersionRepository.create({
       fileId,
       versionNumber: newVersionNumber,
       storageKey: newStorageKey,
       sizeBytes: file.size,
       uploadedById: userId,
-      comment: `Version ${newVersionNumber} uploaded`,
+      comment: versionComment,
     });
     await this.fileVersionRepository.save(version);
 

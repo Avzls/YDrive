@@ -1,19 +1,36 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageSquare, Send, Loader2, Trash2, Pencil, Check, XCircle } from 'lucide-react';
+import { MessageSquare, Send, Loader2, Trash2, Pencil, Check, XCircle, History } from 'lucide-react';
 import { toast } from 'sonner';
-import { Comment, commentsApi } from '@/lib/api';
+import { Comment, commentsApi, filesApi } from '@/lib/api';
 import { format } from 'date-fns';
 
 interface CommentsPanelProps {
   fileId: string;
   fileName?: string;
+  onVersionClick?: (versionId: string, versionNumber: number) => void;
+  selectedVersionId?: string | null;
 }
 
-export function CommentsPanel({ fileId, fileName }: CommentsPanelProps) {
+interface FileVersion {
+  id: string;
+  versionNumber: number;
+  sizeBytes: number;
+  createdAt: string;
+  comment?: string;
+  uploadedBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export function CommentsPanel({ fileId, fileName, onVersionClick, selectedVersionId }: CommentsPanelProps) {
   const [comments, setComments] = useState<Comment[]>([]);
+  const [versions, setVersions] = useState<FileVersion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [versionsLoading, setVersionsLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -21,6 +38,7 @@ export function CommentsPanel({ fileId, fileName }: CommentsPanelProps) {
 
   useEffect(() => {
     loadComments();
+    loadVersions();
   }, [fileId]);
 
   const loadComments = async () => {
@@ -33,6 +51,18 @@ export function CommentsPanel({ fileId, fileName }: CommentsPanelProps) {
       toast.error('Failed to load comments');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadVersions = async () => {
+    setVersionsLoading(true);
+    try {
+      const data = await filesApi.listVersions(fileId);
+      setVersions(data);
+    } catch (err) {
+      console.error('Failed to load versions:', err);
+    } finally {
+      setVersionsLoading(false);
     }
   };
 
@@ -87,9 +117,65 @@ export function CommentsPanel({ fileId, fileName }: CommentsPanelProps) {
     setEditContent('');
   };
 
+  // Show all versions (sorted newest first)
+
   return (
     <div className="flex flex-col h-full bg-slate-900/95 border-l border-slate-700">
-      {/* Header */}
+      {/* Version History Section */}
+      {versions.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 p-4 border-b border-slate-700 flex-shrink-0">
+            <History className="w-5 h-5 text-purple-400" />
+            <h3 className="text-white font-medium">Version History</h3>
+            <span className="text-slate-400 text-sm">({versions.length})</span>
+          </div>
+          <div className="max-h-[200px] overflow-y-auto border-b border-slate-700">
+            {versionsLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+              </div>
+            ) : (
+              <div className="p-3 space-y-2">
+                {versions.map((version, index) => (
+                  <div 
+                    key={version.id} 
+                    onClick={() => onVersionClick?.(version.id, version.versionNumber)}
+                    className={`rounded-lg p-2.5 border transition-all ${
+                      selectedVersionId === version.id 
+                        ? 'bg-purple-500/30 border-purple-400 ring-1 ring-purple-400' 
+                        : onVersionClick 
+                          ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 cursor-pointer' 
+                          : 'bg-purple-500/10 border-purple-500/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-purple-400">
+                        v{version.versionNumber}
+                      </span>
+                      {index === 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-500 text-white rounded">Current</span>
+                      )}
+                      <span className="text-xs text-slate-500">
+                        {format(new Date(version.createdAt), 'MMM d, yyyy')}
+                      </span>
+                    </div>
+                    {version.comment && (
+                      <p className="text-sm text-slate-300">{version.comment}</p>
+                    )}
+                    {version.uploadedBy && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        by {version.uploadedBy.name || version.uploadedBy.email}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Comments Header */}
       <div className="flex items-center gap-2 p-4 border-b border-slate-700 flex-shrink-0">
         <MessageSquare className="w-5 h-5 text-blue-400" />
         <h3 className="text-white font-medium">Comments</h3>

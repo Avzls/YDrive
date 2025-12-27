@@ -52,6 +52,10 @@ const OFFICE_MIME_TYPES = [
 
 export function FilePreview({ file, onClose }: FilePreviewProps) {
   const previewUrl = getPreviewUrl(file.id);
+  const getVersionStreamUrl = (versionId: string) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
+    return `${API_BASE}/files/versions/${versionId}/stream?token=${token}`;
+  };
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
@@ -59,6 +63,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [showComments, setShowComments] = useState(true);
+  const [selectedVersion, setSelectedVersion] = useState<{ id: string; versionNumber: number } | null>(null);
 
   const isImage = file.mimeType.startsWith('image/');
   const isVideo = file.mimeType.startsWith('video/');
@@ -144,10 +149,13 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
   };
 
   const renderPreview = () => {
+    // Use version URL if a version is selected
+    const currentPreviewUrl = selectedVersion ? getVersionStreamUrl(selectedVersion.id) : previewUrl;
+
     if (isImage) {
       return (
         <img
-          src={previewUrl}
+          src={currentPreviewUrl}
           alt={file.name}
           className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
         />
@@ -157,7 +165,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
     if (isVideo) {
       return (
         <video
-          src={previewUrl}
+          src={currentPreviewUrl}
           controls
           autoPlay
           className="max-w-full max-h-[80vh] rounded-lg shadow-2xl"
@@ -421,7 +429,22 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         <div className={`flex-1 flex flex-col transition-all duration-300 ${showComments ? 'pr-0' : ''}`}>
           {/* Header */}
           <div className="flex items-center justify-between p-4 flex-shrink-0">
-            <h3 className="text-white font-medium truncate max-w-[50%]">{file.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-white font-medium truncate max-w-[40%]">{file.name}</h3>
+              {selectedVersion && (
+                <span className="px-2 py-0.5 text-xs bg-purple-500 text-white rounded-full">
+                  Version {selectedVersion.versionNumber}
+                </span>
+              )}
+              {selectedVersion && (
+                <button
+                  onClick={() => setSelectedVersion(null)}
+                  className="text-xs text-purple-400 hover:text-purple-300 underline"
+                >
+                  Back to current
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDownload}
@@ -463,7 +486,12 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         {/* Right side: Comments panel */}
         {showComments && (
           <div className="w-[380px] flex-shrink-0 h-full">
-            <CommentsPanel fileId={file.id} fileName={file.name} />
+            <CommentsPanel 
+              fileId={file.id} 
+              fileName={file.name}
+              onVersionClick={(versionId, versionNumber) => setSelectedVersion({ id: versionId, versionNumber })}
+              selectedVersionId={selectedVersion?.id}
+            />
           </div>
         )}
       </div>

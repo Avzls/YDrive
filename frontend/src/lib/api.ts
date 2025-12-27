@@ -237,9 +237,10 @@ export const filesApi = {
     const { data } = await api.post<FileItem>(`/files/versions/${versionId}/restore`);
     return data;
   },
-  uploadNewVersion: async (fileId: string, file: File) => {
+  uploadNewVersion: async (fileId: string, file: File, comment?: string) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (comment) formData.append('comment', comment);
     const { data } = await api.post<FileItem>(`/files/${fileId}/version`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

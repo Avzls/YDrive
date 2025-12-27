@@ -82,6 +82,7 @@ export class FilesController {
       type: 'object',
       properties: {
         file: { type: 'string', format: 'binary' },
+        comment: { type: 'string', description: 'Optional version comment/description' },
       },
     },
   })
@@ -89,9 +90,11 @@ export class FilesController {
   async uploadNewVersion(
     @Param('id') fileId: string,
     @UploadedFile() file: Express.Multer.File,
+    @Body('comment') comment: string,
     @CurrentUser() user: User,
   ) {
-    return this.filesService.uploadNewVersion(fileId, file, user.id);
+    console.log('[VersionUpload] fileId:', fileId, 'comment:', comment);
+    return this.filesService.uploadNewVersion(fileId, file, user.id, comment);
   }
 
   /**

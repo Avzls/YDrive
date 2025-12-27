@@ -31,6 +31,7 @@ import { VersionHistoryModal } from './VersionHistoryModal';
 import { TagsModal } from './TagsModal';
 import { CommentsModal } from './CommentsModal';
 import { FileDetailsModal } from './FileDetailsModal';
+import { UploadVersionModal } from './UploadVersionModal';
 import { ContextMenu, getFileContextMenuItems, getFolderContextMenuItems, getTrashedFileContextMenuItems, getTrashedFolderContextMenuItems } from './ContextMenu';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -106,7 +107,6 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   const [tagsFile, setTagsFile] = useState<FileItem | null>(null);
   const [commentsFile, setCommentsFile] = useState<FileItem | null>(null);
   const [detailsFile, setDetailsFile] = useState<FileItem | null>(null);
-  const versionFileInputRef = useRef<HTMLInputElement>(null);
   
   // Multi-select state
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -548,26 +548,6 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
 
   const triggerVersionUpload = (file: FileItem) => {
     setUploadVersionFile(file);
-    versionFileInputRef.current?.click();
-  };
-
-  const handleVersionFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile || !uploadVersionFile) return;
-
-    try {
-      toast.info(`Uploading new version of "${uploadVersionFile.name}"...`);
-      await filesApi.uploadNewVersion(uploadVersionFile.id, selectedFile);
-      toast.success(`New version uploaded for "${uploadVersionFile.name}"`);
-      onRefresh();
-    } catch (err) {
-      toast.error('Failed to upload new version');
-    } finally {
-      setUploadVersionFile(null);
-      if (versionFileInputRef.current) {
-        versionFileInputRef.current.value = '';
-      }
-    }
   };
 
   const handleDownloadFolder = async (folder: Folder) => {
@@ -659,14 +639,6 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   if (viewMode === 'grid') {
     return (
       <>
-        {/* Hidden file input for version upload */}
-        <input
-          ref={versionFileInputRef}
-          type="file"
-          className="hidden"
-          onChange={handleVersionFileChange}
-        />
-
         {/* Selection Toolbar */}
         {hasSelection && (
           <div className="flex items-center gap-4 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -925,6 +897,15 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
               onRefresh();
               setVersionHistoryFile(null);
             }}
+          />
+        )}
+
+        {/* Upload Version Modal */}
+        {uploadVersionFile && (
+          <UploadVersionModal
+            file={uploadVersionFile}
+            onClose={() => setUploadVersionFile(null)}
+            onSuccess={onRefresh}
           />
         )}
 
@@ -1265,6 +1246,26 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
               })
           }
           onClose={() => setContextMenu(null)}
+        />
+      )}
+      {/* Version History Modal */}
+      {versionHistoryFile && (
+        <VersionHistoryModal
+          file={versionHistoryFile}
+          onClose={() => setVersionHistoryFile(null)}
+          onRestore={() => {
+            onRefresh();
+            setVersionHistoryFile(null);
+          }}
+        />
+      )}
+
+      {/* Upload Version Modal */}
+      {uploadVersionFile && (
+        <UploadVersionModal
+          file={uploadVersionFile}
+          onClose={() => setUploadVersionFile(null)}
+          onSuccess={onRefresh}
         />
       )}
 
