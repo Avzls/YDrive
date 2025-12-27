@@ -76,6 +76,7 @@ CREATE TABLE files (
     trashed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_accessed_at TIMESTAMP,
     
     CONSTRAINT unique_file_name_per_folder UNIQUE(folder_id, name, owner_id)
 );
