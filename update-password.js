@@ -5,7 +5,7 @@ async function updatePassword() {
   const client = new Client({
     host: 'postgres',
     user: 'postgres',
-    password: 'postgres',
+    password: 'YDrive2025SecureDB!',
     database: 'filestorage'
   });
   
