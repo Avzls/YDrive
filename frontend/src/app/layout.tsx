@@ -23,10 +23,13 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         {children}
         <Toaster 
-          position="bottom-right"
+          position="top-right"
           richColors
           expand
           closeButton
+          toastOptions={{
+            style: { zIndex: 99999 },
+          }}
         />
       </body>
     </html>

@@ -24,7 +24,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    // Don't redirect for login requests - let the error propagate to show toast
+    const isAuthRequest = error.config?.url?.includes('/auth/');
+    const isOnLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login';
+    
+    if (error.response?.status === 401 && typeof window !== 'undefined' && !isAuthRequest && !isOnLoginPage) {
       localStorage.removeItem('accessToken');
       window.location.href = '/login';
     }
