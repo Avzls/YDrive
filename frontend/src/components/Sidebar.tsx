@@ -15,13 +15,16 @@ import {
   Clock,
   Shield,
   Activity,
+  FolderUp,
 } from 'lucide-react';
+import { FileUploader } from './FileUploader';
 
 interface SidebarProps {
   currentView: 'drive' | 'shared' | 'recent' | 'starred' | 'trash' | 'activity';
   onViewChange: (view: 'drive' | 'shared' | 'recent' | 'starred' | 'trash' | 'activity') => void;
   onNewFolder: () => void;
-  onUpload: () => void;
+  currentFolderId?: string | null;
+  onUploadComplete?: () => void;
 
   storageUsed?: number;
   storageQuota?: number;
@@ -46,7 +49,8 @@ export function Sidebar({
   currentView,
   onViewChange,
   onNewFolder,
-  onUpload,
+  currentFolderId,
+  onUploadComplete,
   storageUsed = 0,
   storageQuota = 0,
   collapsed = false,
@@ -55,12 +59,18 @@ export function Sidebar({
   onAdminClick,
 }: SidebarProps) {
   const [showNewMenu, setShowNewMenu] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   const formatStorage = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  const handleUploadComplete = () => {
+    setShowUploadModal(false);
+    onUploadComplete?.();
   };
 
   if (collapsed) {
@@ -98,6 +108,7 @@ export function Sidebar({
   }
 
   return (
+    <>
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       {/* New Button */}
       <div className="p-4">
@@ -136,13 +147,23 @@ export function Sidebar({
                 <hr className="my-2 border-gray-200" />
                 <button
                   onClick={() => {
-                    onUpload();
+                    setShowUploadModal(true);
                     setShowNewMenu(false);
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100"
                 >
                   <FileUp className="w-5 h-5" />
                   <span>File upload</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUploadModal(true);
+                    setShowNewMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100"
+                >
+                  <FolderUp className="w-5 h-5" />
+                  <span>Folder upload</span>
                 </button>
               </div>
             </>
@@ -208,5 +229,16 @@ export function Sidebar({
         </p>
       </div>
     </aside>
+    
+    {/* Upload Modal */}
+    {showUploadModal && (
+      <FileUploader 
+        folderId={currentFolderId || undefined} 
+        onUploadComplete={handleUploadComplete}
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+      />
+    )}
+    </>
   );
 }
