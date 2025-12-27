@@ -59,6 +59,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?MinIO secret key required}
       - JWT_SECRET=${JWT_SECRET:?JWT secret required}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?JWT refresh secret required}
+      - FRONTEND_URL=${FRONTEND_URL:-https://localhost:3001}
       - SKIP_VIRUS_SCAN=true
     depends_on:
       postgres:
