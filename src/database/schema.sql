@@ -238,13 +238,10 @@ CREATE INDEX idx_comments_file ON comments(file_id);
 CREATE INDEX idx_comments_user ON comments(user_id);
 
 -- ============================================
--- INSERT DEFAULT ADMIN USER
--- Password: alvin123 (bcrypt hash)
+-- INSERT DEMO USERS
+-- Password: admin123 (bcrypt hash)
 -- ============================================
-INSERT INTO users (email, nip, password_hash, name, is_admin) VALUES (
-    'alvin@company.local',
-    '25129120',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.n3ELEtxRvJvPGi',
-    'Alvin',
-    true
-);
+INSERT INTO users (email, nip, password_hash, name, is_admin) VALUES 
+('admin@company.local', '00000001', '$2b$10$ogCLwcenskFPpwyvu/Y6q.mKOVOeB/7WpOOIsKfvAsNngybeOtVod6', 'admin', true),
+('user1@company.local', '00000002', '$2b$10$ogCLwcenskFPpwyvu/Y6q.mKOVOeB/7WpOOIsKfvAsNngybeOtVod6', 'user 1', false),
+('user2@company.local', '00000003', '$2b$10$ogCLwcenskFPpwyvu/Y6q.mKOVOeB/7WpOOIsKfvAsNngybeOtVod6', 'user 2', false);
