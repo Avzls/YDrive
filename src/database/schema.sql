@@ -223,6 +223,21 @@ CREATE INDEX idx_file_tags_tag ON file_tags(tag_id);
 CREATE INDEX idx_file_tags_file ON file_tags(file_id);
 
 -- ============================================
+-- COMMENTS TABLE
+-- ============================================
+CREATE TABLE comments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    content TEXT NOT NULL,
+    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_comments_file ON comments(file_id);
+CREATE INDEX idx_comments_user ON comments(user_id);
+
+-- ============================================
 -- INSERT DEFAULT ADMIN USER
 -- Password: alvin123 (bcrypt hash)
 -- ============================================
