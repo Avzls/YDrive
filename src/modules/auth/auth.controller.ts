@@ -25,6 +25,18 @@ class RefreshRequestDto {
   refreshToken: string;
 }
 
+class ChangePasswordDto {
+  @ApiProperty({ example: 'current_password' })
+  @IsString()
+  @IsNotEmpty()
+  currentPassword: string;
+
+  @ApiProperty({ example: 'new_password123' })
+  @IsString()
+  @IsNotEmpty()
+  newPassword: string;
+}
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -48,5 +60,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   async getProfile(@CurrentUser() user: User) {
     return this.authService.getProfile(user.id);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change current user password' })
+  async changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(user.id, dto.currentPassword, dto.newPassword);
   }
 }

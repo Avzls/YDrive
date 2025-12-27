@@ -84,6 +84,10 @@ export const authApi = {
     const { data } = await api.get<User>('/auth/me');
     return data;
   },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const { data } = await api.post('/auth/change-password', { currentPassword, newPassword });
+    return data as { success: boolean };
+  },
 };
 
 // Files

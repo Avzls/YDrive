@@ -43,6 +43,7 @@ export default function HomePage() {
   const [newFolderName, setNewFolderName] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showVersionInfo, setShowVersionInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Drag & Drop state
@@ -438,10 +439,37 @@ export default function HomePage() {
 
           {/* Right Actions */}
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button className="p-2 hover:bg-gray-100 rounded-full" title="Support">
-              <HelpCircle className="w-5 h-5 text-gray-600" />
-            </button>
-            <button className="p-2 hover:bg-gray-100 rounded-full" title="Settings">
+            <div className="relative">
+              <button 
+                onClick={() => setShowVersionInfo(!showVersionInfo)}
+                className="p-2 hover:bg-gray-100 rounded-full" 
+                title="About"
+              >
+                <HelpCircle className="w-5 h-5 text-gray-600" />
+              </button>
+              
+              {/* Version Popup */}
+              {showVersionInfo && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowVersionInfo(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-3 px-4 z-50">
+                    <div className="flex items-center gap-3 mb-3">
+                      <img src="/logo.png" alt="YDrive" className="w-10 h-10" />
+                      <div>
+                        <p className="font-semibold text-gray-900">YDrive</p>
+                        <p className="text-xs text-gray-500">Cloud Storage System</p>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-100 pt-3 space-y-1">
+                      <p className="text-sm text-gray-600"><span className="font-medium">Version:</span> 1.0.0</p>
+                      <p className="text-sm text-gray-600"><span className="font-medium">Build:</span> 2025.12.27</p>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3">© 2025 YDrive. All rights reserved.</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <button onClick={() => router.push('/settings')} className="p-2 hover:bg-gray-100 rounded-full" title="Settings">
               <Settings className="w-5 h-5 text-gray-600" />
             </button>
             
