@@ -50,3 +50,16 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// Clipboard store for Ctrl+C / Ctrl+V
+interface ClipboardState {
+  clipboard: { fileIds: string[]; folderIds: string[] } | null;
+  setClipboard: (data: { fileIds: string[]; folderIds: string[] } | null) => void;
+  clearClipboard: () => void;
+}
+
+export const useClipboardStore = create<ClipboardState>()((set) => ({
+  clipboard: null,
+  setClipboard: (data) => set({ clipboard: data }),
+  clearClipboard: () => set({ clipboard: null }),
+}));

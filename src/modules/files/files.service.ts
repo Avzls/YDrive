@@ -847,7 +847,12 @@ export class FilesService {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    if (user.storageUsedBytes + originalFile.sizeBytes > user.storageQuotaBytes) {
+    // Note: PostgreSQL returns bigint as string, so we need to convert to Number
+    const usedBytes = Number(user.storageUsedBytes);
+    const quotaBytes = Number(user.storageQuotaBytes);
+    const fileSize = Number(originalFile.sizeBytes);  // sizeBytes is also bigint
+    
+    if (usedBytes + fileSize > quotaBytes) {
       throw new BadRequestException('Storage quota exceeded. Cannot copy file.');
     }
 

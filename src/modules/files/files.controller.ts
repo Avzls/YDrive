@@ -23,7 +23,7 @@ import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody, ApiProduces } from '@nestjs/swagger';
 import { FilesService } from './files.service';
-import { InitUploadDto, CompleteUploadDto, DirectUploadDto } from './dto';
+import { InitUploadDto, CompleteUploadDto, DirectUploadDto, CopyFileDto } from './dto';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Public } from '@common/decorators/public.decorator';
@@ -323,10 +323,19 @@ export class FilesController {
   @ApiOperation({ summary: 'Copy file to another folder' })
   async copyFile(
     @Param('id') id: string,
-    @Body('folderId') folderId: string | null,
+    @Body() dto: CopyFileDto,
     @CurrentUser() user: User,
   ) {
-    return this.filesService.copy(id, user.id, folderId);
+    console.log('[CopyFile] id:', id, 'dto:', JSON.stringify(dto), 'user:', user?.id);
+    const folderId = dto?.folderId ?? null;
+    try {
+      const result = await this.filesService.copy(id, user.id, folderId);
+      console.log('[CopyFile] Success:', result.id);
+      return result;
+    } catch (error) {
+      console.error('[CopyFile] Error:', error.message, error.stack);
+      throw error;
+    }
   }
 
   /**

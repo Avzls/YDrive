@@ -22,6 +22,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { FileItem, Folder, filesApi, foldersApi } from '@/lib/api';
+import { useClipboardStore } from '@/lib/store';
 import { FilePreview } from './FilePreview';
 import { ShareModal } from './ShareModal';
 import { RenameModal } from './RenameModal';
@@ -43,6 +44,7 @@ interface FileBrowserProps {
   onRefresh: () => void;
   viewMode?: 'grid' | 'list';
   isTrashView?: boolean;
+  currentFolderId?: string | null;
 }
 
 function getFileIcon(mimeType: string) {
@@ -94,7 +96,7 @@ function getStatusBadge(status: string) {
   }
 }
 
-export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode = 'grid', isTrashView = false }: FileBrowserProps) {
+export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode = 'grid', isTrashView = false, currentFolderId }: FileBrowserProps) {
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
@@ -117,8 +119,8 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
   const [draggedItem, setDraggedItem] = useState<{ type: 'file' | 'folder'; id: string } | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
 
-  // Clipboard state for Ctrl+C / Ctrl+V
-  const [clipboard, setClipboard] = useState<{ fileIds: string[]; folderIds: string[] } | null>(null);
+  // Clipboard state for Ctrl+C / Ctrl+V (from global store)
+  const { clipboard, setClipboard } = useClipboardStore();
 
   const hasSelection = selectedFiles.size > 0 || selectedFolders.size > 0;
   const totalSelected = selectedFiles.size + selectedFolders.size;
@@ -179,15 +181,12 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
     try {
       toast.info(`Pasting ${total} item(s)...`);
       
-      // Copy files to current folder (null means root)
+      // Copy files to current folder
       for (const fileId of fileIds) {
-        // We need to get current folder context - for now, files will be copied to same location
-        // In a real implementation, you'd pass currentFolderId from parent
-        await filesApi.copy(fileId, null);
+        await filesApi.copy(fileId, currentFolderId ?? null);
       }
       
       // Note: Folder copy is not implemented in backend yet
-      // For now, just show a message for folders
       if (folderIds.length > 0) {
         toast.warning('Folder copy not yet supported');
       }
@@ -247,9 +246,15 @@ export function FileBrowser({ folders, files, onFolderClick, onRefresh, viewMode
       }
 
       // Ctrl+V / Cmd+V - Paste from clipboard
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard) {
-        e.preventDefault();
-        handlePasteFromClipboard();
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        console.log('[FileBrowser] Ctrl+V pressed, clipboard:', clipboard);
+        if (clipboard) {
+          e.preventDefault();
+          handlePasteFromClipboard();
+        } else {
+          console.log('[FileBrowser] No clipboard data');
+          toast.warning('No items to paste. Copy items first with Ctrl+C');
+        }
         return;
       }
 

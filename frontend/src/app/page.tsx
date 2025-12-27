@@ -625,6 +625,7 @@ export default function HomePage() {
                 onRefresh={loadContents}
                 viewMode={viewMode}
                 isTrashView={currentView === 'trash'}
+                currentFolderId={currentFolderId}
               />
             )}
           </div>
