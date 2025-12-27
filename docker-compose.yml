@@ -40,6 +40,24 @@ services:
       - filestorage
 
   # ============================================
+  # Next.js Frontend
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - api
+    networks:
+      - filestorage
+
+  # ============================================
   # Background Worker
   # ============================================
   worker:
